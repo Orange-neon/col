@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Console } from "./components/Console";
+import { useFeedback } from "./components/Feedback";
 import { HomeScreen } from "./components/HomeScreen";
 import { HostDashboard } from "./components/HostDashboard";
 import { LeaderboardTicker } from "./components/LeaderboardTicker";
@@ -111,19 +112,24 @@ function GameShell({
 }: GameShellProps) {
   const [output, setOutput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [solutionProblem, setSolutionProblem] = useState<Problem | null>(null);
-
-  const showNotice = useCallback((message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice((current) => (current === message ? null : current)), 3_000);
-  }, []);
+  const { confirm, notify } = useFeedback();
 
   const selectDifficulty = (difficulty: Difficulty) => {
     const result = race.selectProblem(difficulty);
-    if (result === "active") showNotice("Give up or solve the current challenge first!");
+    if (result === "active") {
+      notify({
+        tone: "warning",
+        title: "Challenge already in progress",
+        message: "Give up or solve the current challenge before switching difficulty.",
+      });
+    }
     else if (result === "exhausted") {
-      showNotice(`You have completed every ${difficulty} challenge in this race.`);
+      notify({
+        tone: "info",
+        title: `${DIFFICULTY_CONFIG[difficulty].label} trail completed`,
+        message: `You have solved every ${difficulty} challenge in this race.`,
+      });
     } else {
       setOutput(`$ ${DIFFICULTY_CONFIG[difficulty].label} challenge selected. Good luck!`);
     }
@@ -171,6 +177,11 @@ function GameShell({
             result.stderr ? `\nPython error:\n${result.stderr}` : "",
           ].join("\n"),
         );
+        notify({
+          tone: "error",
+          title: `Test ${index + 1} did not pass`,
+          message: "Review the terminal output, adjust your solution, and try again.",
+        });
         setBusy(false);
         return;
       }
@@ -180,6 +191,11 @@ function GameShell({
     try {
       await race.solve(problem);
       setOutput(`✓ All ${problem.testCases.length} tests passed!\n+${points} points — summit reached.`);
+      notify({
+        tone: "success",
+        title: `+${points} points`,
+        message: `${problem.title} completed successfully.`,
+      });
       confetti({
         particleCount: 110,
         spread: 72,
@@ -187,10 +203,17 @@ function GameShell({
         colors: ["#38bdf8", "#34d399", "#fbbf24", "#a78bfa"],
       });
       if (race.solvedIds.length + 1 === bank.problems.length) {
-        showNotice("Race complete — you solved every challenge!");
+        notify({
+          tone: "success",
+          title: "Race complete",
+          message: "You solved every challenge in the problem bank!",
+          duration: 7_000,
+        });
       }
     } catch (reason) {
-      setOutput(`Score could not be saved:\n${reason instanceof Error ? reason.message : String(reason)}`);
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setOutput(`Score could not be saved:\n${message}`);
+      notify({ tone: "error", title: "Score was not saved", message });
     } finally {
       setBusy(false);
     }
@@ -200,14 +223,27 @@ function GameShell({
     const problem = race.activeProblem;
     if (!problem || busy) return;
     const penalty = DIFFICULTY_CONFIG[problem.difficulty].penalty;
-    if (!window.confirm(`Give up ${problem.title} and lose ${penalty} points?`)) return;
+    const confirmed = await confirm({
+      title: "Give up this challenge?",
+      message: `${problem.title} will be forfeited and ${penalty} points will be deducted from your score.`,
+      confirmLabel: "Give up",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       await race.forfeit(problem);
       setSolutionProblem(problem);
       setOutput(`Challenge forfeited. ${penalty} points deducted.`);
+      notify({
+        tone: "warning",
+        title: "Challenge forfeited",
+        message: `${penalty} points were deducted. The reference solution is now available.`,
+      });
     } catch (reason) {
-      setOutput(`Forfeit could not be saved:\n${reason instanceof Error ? reason.message : String(reason)}`);
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setOutput(`Forfeit could not be saved:\n${message}`);
+      notify({ tone: "error", title: "Forfeit was not saved", message });
     } finally {
       setBusy(false);
     }
@@ -231,12 +267,6 @@ function GameShell({
         onSelectDifficulty={selectDifficulty}
         onReset={onReset}
       />
-
-      {notice && (
-        <div className="fixed left-1/2 top-24 z-40 w-[min(92vw,34rem)] -translate-x-1/2 rounded-xl border border-amber-300/30 bg-amber-950/95 px-4 py-3 text-center text-sm font-bold text-amber-100 shadow-2xl">
-          {notice}
-        </div>
-      )}
 
       <main className="mx-auto grid max-w-[1600px] gap-4 px-4 py-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(330px,0.75fr)] lg:px-6">
         <Workspace problem={race.activeProblem} code={race.editorCode} onCodeChange={race.setEditorCode} />
@@ -289,8 +319,18 @@ function GameShell({
 function LocalGame({ bank, onExit }: { bank: ProblemBank; onExit: () => void }) {
   const python = usePyodide();
   const race = useLocalRace(bank);
-  const resetRace = () => {
-    if (window.confirm("Reset your score, solved challenges, drafts, and the simulated race?")) race.reset();
+  const { confirm, notify } = useFeedback();
+  const resetRace = async () => {
+    const confirmed = await confirm({
+      title: "Reset your solo race?",
+      message: "Your score, solved challenges, code drafts, and simulated race progress will be cleared.",
+      confirmLabel: "Reset race",
+      tone: "danger",
+    });
+    if (confirmed) {
+      race.reset();
+      notify({ tone: "success", title: "Solo race reset", message: "A fresh trail is ready." });
+    }
   };
   return (
     <GameShell
@@ -312,8 +352,21 @@ interface RoomPageProps {
 
 function HostRoom({ room, session }: RoomPageProps) {
   const meta = room.meta!;
+  const { confirm, notify } = useFeedback();
   const expire = useCallback(() => room.finishRace("time"), [room.finishRace]);
   const timeRemaining = useCountdown(meta, room.serverNow, expire);
+  const closeRoom = async () => {
+    const confirmed = await confirm({
+      title: "Close this room?",
+      message: "The room will close for every participant, and nobody will be able to rejoin it.",
+      confirmLabel: "Close room",
+      tone: "danger",
+    });
+    if (confirmed) {
+      await room.closeRoom();
+      notify({ tone: "info", title: "Room closed", message: "All participants have been disconnected." });
+    }
+  };
 
   if (meta.status === "lobby") {
     return (
@@ -324,9 +377,7 @@ function HostRoom({ room, session }: RoomPageProps) {
         durationSeconds={meta.durationSeconds}
         onDurationChange={room.setDuration}
         onStart={room.startRace}
-        onLeave={() => {
-          if (window.confirm("Close this room for everyone?")) void room.closeRoom();
-        }}
+        onLeave={() => void closeRoom()}
       />
     );
   }
@@ -339,9 +390,7 @@ function HostRoom({ room, session }: RoomPageProps) {
         players={room.players}
         endReason={meta.endReason}
         onRematch={room.rematch}
-        onClose={() => {
-          if (window.confirm("Close this room for everyone?")) void room.closeRoom();
-        }}
+        onClose={() => void closeRoom()}
       />
     );
   }
