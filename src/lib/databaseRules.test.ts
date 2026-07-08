@@ -14,7 +14,7 @@ describe("Realtime Database rule shape", () => {
 
   it("requires authentication to read a room", () => {
     const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
-    expect(room[".read"]).toBe("auth != null");
+    expect(String(room[".read"])).toContain("google.com");
   });
 
   it("limits leaderboard and progress writes to their owner or host", () => {
@@ -34,5 +34,25 @@ describe("Realtime Database rule shape", () => {
     const metaValidation = String((room.meta as RuleNode)[".validate"]);
     expect(metaValidation).toContain("topicIds");
     expect(metaValidation).toContain("length <= 160");
+    expect(metaValidation).toContain("unlimited");
+    expect(metaValidation).toContain("isBoolean");
+  });
+
+  it("requires Google sign-in for room writes", () => {
+    const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
+    expect(String(room[".write"])).toContain("sign_in_provider");
+    expect(String(((room.progress as RuleNode).$uid as RuleNode)[".write"])).toContain("google.com");
+  });
+
+  it("validates the free adaptive learning profile", () => {
+    const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
+    const progress = ((room.progress as RuleNode).$uid ?? {}) as RuleNode;
+    const adaptive = ((progress.adaptive as RuleNode).$difficulty ?? {}) as RuleNode;
+    const validation = String(adaptive[".validate"]);
+    expect(validation).toContain("$difficulty === 'easy'");
+    expect(validation).toContain("rating");
+    expect(validation).toContain("outcomes");
+    expect(validation).toContain("forfeited");
+    expect(validation).toContain("streak");
   });
 });

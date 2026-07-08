@@ -1,5 +1,7 @@
 import Editor from "@monaco-editor/react";
 import { BookOpen, Braces } from "lucide-react";
+import { DIFFICULTY_CONFIG } from "../data/difficulty";
+import { getProblemBonus, getProblemReward } from "../data/problemProgression";
 import type { Problem } from "../data/problemTypes";
 import { ProblemDescription } from "./ProblemDescription";
 
@@ -19,7 +21,8 @@ export function Workspace({ problem, code, onCodeChange }: WorkspaceProps) {
           </div>
           <h1 className="text-2xl font-black text-white">Choose your next climb</h1>
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            Pick Easy, Medium, or Hard above. Your Python engine is warming up while you choose.
+            Pick Easy, Medium, or Hard above. Col randomizes each pick and gradually adapts the
+            challenge level to how you are doing.
           </p>
         </div>
       </section>
@@ -29,8 +32,11 @@ export function Workspace({ problem, code, onCodeChange }: WorkspaceProps) {
   return (
     <section className="panel grid min-h-[620px] grid-rows-[minmax(220px,0.75fr)_minmax(360px,1.25fr)] overflow-hidden">
       <div className="min-h-0 overflow-y-auto border-b border-slate-700/70 p-5">
-        <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-          <BookOpen size={15} /> Problem
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+          <span className="flex items-center gap-2"><BookOpen size={15} /> Problem {problem.progressionOrder ?? ""}</span>
+          <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] tracking-wider text-amber-200">
+            +{getProblemReward(problem)} points · {DIFFICULTY_CONFIG[problem.difficulty].points} base + {getProblemBonus(problem)} bonus
+          </span>
         </div>
         <ProblemDescription markdown={problem.description} />
       </div>

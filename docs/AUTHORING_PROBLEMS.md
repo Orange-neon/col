@@ -18,6 +18,8 @@ Difficulty controls points and penalties centrally through `src/data/difficulty.
 
 The practice selector derives each problem's curriculum topic from its tags. Prefer the canonical structural tags `conditionals`, `loops`, `while-loops`, `strings`, `lists`, `nested-lists`, `dictionaries`, `functions`, `modules`, and `classes` when they apply. Topic order and classification live in `src/data/curriculum.ts`; new structural topics should be added there before publishing a bank.
 
+Within each difficulty tier, `src/data/problemProgression.ts` ranks problems by curriculum stage, advanced structural tags, reference-solution length, branching, and nesting. It then assigns the tier's per-problem bonus by progression percentile. Use accurate structural tags and straightforward reference solutions so ordering and rewards remain meaningful.
+
 Run validation and the production build before publishing:
 
 ```powershell

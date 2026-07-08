@@ -60,7 +60,7 @@ export function Navbar({
                   activeDifficulty === difficulty ? "ring-2 ring-white/60" : ""
                 }`}
               >
-                {config.label} (+{config.points})
+                {config.label} (+{config.points} base)
                 <span className="ml-2 text-[11px] opacity-60">{remaining[difficulty]} left</span>
               </button>
             );

@@ -26,6 +26,7 @@ export interface RaceController {
   remaining: Record<Difficulty, number>;
   events: RaceEvent[];
   selectProblem: (difficulty: Difficulty) => "selected" | "active" | "exhausted";
+  recordMiss?: (problem: Problem) => void | Promise<void>;
   solve: (problem: Problem) => void | Promise<void>;
   forfeit: (problem: Problem) => void | Promise<void>;
   reset?: () => void;

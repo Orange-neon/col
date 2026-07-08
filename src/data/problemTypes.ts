@@ -14,6 +14,9 @@ export interface Problem {
   starterCode: string;
   solutionCode: string;
   testCases: TestCase[];
+  progressionOrder?: number;
+  complexityScore?: number;
+  bonusPoints?: number;
 }
 
 export interface ProblemBank {

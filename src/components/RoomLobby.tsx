@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock3, Copy, LoaderCircle, LogOut, Play, Radio, Users } from "lucide-react";
+import { CheckCircle2, Clock3, Copy, Infinity as InfinityIcon, LoaderCircle, LogOut, Play, Radio, Users } from "lucide-react";
 import type { PyodideStatus } from "../hooks/usePyodide";
 import type { RoomPlayer } from "../types/multiplayer";
 
@@ -7,8 +7,10 @@ interface RoomLobbyProps {
   code: string;
   players: RoomPlayer[];
   durationSeconds: number;
+  unlimited: boolean;
   pythonStatus?: PyodideStatus;
   onDurationChange?: (minutes: number) => void;
+  onUnlimitedChange?: (unlimited: boolean) => void;
   onStart?: () => void;
   onRetryPython?: () => void;
   onLeave: () => void;
@@ -19,8 +21,10 @@ export function RoomLobby({
   code,
   players,
   durationSeconds,
+  unlimited,
   pythonStatus,
   onDurationChange,
+  onUnlimitedChange,
   onStart,
   onRetryPython,
   onLeave,
@@ -73,17 +77,36 @@ export function RoomLobby({
             {role === "host" ? (
               <>
                 <div className="mb-5 flex items-center gap-2 text-sm font-black text-white"><Clock3 size={17} /> Race length</div>
+                <button
+                  type="button"
+                  aria-pressed={unlimited}
+                  onClick={() => onUnlimitedChange?.(!unlimited)}
+                  className={`mb-4 flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition ${
+                    unlimited
+                      ? "border-violet-400/40 bg-violet-400/10 text-violet-200"
+                      : "border-slate-700 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-xs font-bold"><InfinityIcon size={16} /> Unlimited</span>
+                  <span className={`h-5 w-9 rounded-full p-0.5 ${unlimited ? "bg-violet-400" : "bg-slate-700"}`}>
+                    <span className={`block size-4 rounded-full bg-white transition ${unlimited ? "translate-x-4" : ""}`} />
+                  </span>
+                </button>
                 <label className="text-xs text-slate-500" htmlFor="duration">Minutes</label>
                 <input
                   id="duration"
                   type="number"
                   min={1}
                   max={120}
+                  disabled={unlimited}
                   value={Math.round(durationSeconds / 60)}
                   onChange={(event) => onDurationChange?.(Number(event.target.value))}
-                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-white"
+                  className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-white disabled:cursor-not-allowed disabled:opacity-35"
                 />
-                <p className="mt-3 text-xs leading-5 text-slate-600">Start unlocks when every connected student has loaded Python.</p>
+                <p className="mt-3 text-xs leading-5 text-slate-600">
+                  {unlimited ? "The race continues until the host ends it." : "Timed races can run for up to two hours."}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-600">Start unlocks when every connected student has loaded Python.</p>
                 <button
                   type="button"
                   disabled={!allReady}
@@ -95,6 +118,11 @@ export function RoomLobby({
               </>
             ) : (
               <div className="text-center">
+                {unlimited && (
+                  <p className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-violet-400/25 bg-violet-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+                    <InfinityIcon size={12} /> Unlimited marathon
+                  </p>
+                )}
                 <div className={`mx-auto grid size-14 place-items-center rounded-2xl ${pythonStatus === "ready" ? "bg-emerald-400/10 text-emerald-300" : "bg-sky-400/10 text-sky-300"}`}>
                   {pythonStatus === "ready" ? <CheckCircle2 size={27} /> : <Radio size={27} className="animate-pulse" />}
                 </div>

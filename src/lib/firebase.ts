@@ -12,23 +12,46 @@ const firebaseConfig = {
 
 export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
 
-interface FirebaseContext {
+export interface GoogleUserProfile {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL: string | null;
+}
+
+interface FirebaseServices {
   app: FirebaseApp;
   auth: Auth;
   database: Database;
-  user: User;
+  authApi: typeof import("firebase/auth");
   db: typeof import("firebase/database");
 }
 
-let contextPromise: Promise<FirebaseContext> | null = null;
+interface FirebaseContext extends FirebaseServices {
+  user: User;
+}
 
-export function getFirebaseContext(): Promise<FirebaseContext> {
+let servicesPromise: Promise<FirebaseServices> | null = null;
+
+function isGoogleUser(user: User | null): user is User {
+  return Boolean(user?.providerData.some((provider) => provider.providerId === "google.com"));
+}
+
+function profile(user: User): GoogleUserProfile {
+  return {
+    uid: user.uid,
+    displayName: user.displayName?.trim() || user.email?.split("@")[0] || "Google user",
+    email: user.email ?? "",
+    photoURL: user.photoURL,
+  };
+}
+
+async function getFirebaseServices(): Promise<FirebaseServices> {
   if (!isFirebaseConfigured) {
-    return Promise.reject(new Error("Firebase environment variables are not configured."));
+    throw new Error("Firebase environment variables are not configured.");
   }
-
-  if (!contextPromise) {
-    contextPromise = (async () => {
+  if (!servicesPromise) {
+    servicesPromise = (async () => {
       const [appApi, authApi, db] = await Promise.all([
         import("firebase/app"),
         import("firebase/auth"),
@@ -37,10 +60,53 @@ export function getFirebaseContext(): Promise<FirebaseContext> {
       const app = appApi.getApps().length ? appApi.getApp() : appApi.initializeApp(firebaseConfig);
       const auth = authApi.getAuth(app);
       await authApi.setPersistence(auth, authApi.browserLocalPersistence);
-      const user = auth.currentUser ?? (await authApi.signInAnonymously(auth)).user;
-      return { app, auth, database: db.getDatabase(app), user, db };
+      return { app, auth, database: db.getDatabase(app), authApi, db };
     })();
   }
+  return servicesPromise;
+}
 
-  return contextPromise;
+export async function getFirebaseContext(): Promise<FirebaseContext> {
+  const services = await getFirebaseServices();
+  await services.auth.authStateReady();
+  const user = services.auth.currentUser;
+  if (!isGoogleUser(user)) {
+    throw new Error("Sign in with Google to use multiplayer.");
+  }
+  return { ...services, user };
+}
+
+export async function signInWithGoogle(): Promise<GoogleUserProfile> {
+  const { auth, authApi } = await getFirebaseServices();
+  await auth.authStateReady();
+  const provider = new authApi.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  let result;
+  if (auth.currentUser?.isAnonymous) {
+    try {
+      result = await authApi.linkWithPopup(auth.currentUser, provider);
+    } catch (reason) {
+      const code = (reason as { code?: string }).code;
+      if (code !== "auth/credential-already-in-use" && code !== "auth/email-already-in-use") {
+        throw reason;
+      }
+      result = await authApi.signInWithPopup(auth, provider);
+    }
+  } else {
+    result = await authApi.signInWithPopup(auth, provider);
+  }
+  if (!isGoogleUser(result.user)) throw new Error("Google sign-in did not complete.");
+  return profile(result.user);
+}
+
+export async function signOutFirebase(): Promise<void> {
+  const { auth, authApi } = await getFirebaseServices();
+  await authApi.signOut(auth);
+}
+
+export async function observeGoogleUser(
+  listener: (user: GoogleUserProfile | null) => void,
+): Promise<() => void> {
+  const { auth, authApi } = await getFirebaseServices();
+  return authApi.onAuthStateChanged(auth, (user) => listener(isGoogleUser(user) ? profile(user) : null));
 }

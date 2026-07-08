@@ -1,4 +1,5 @@
 import type { ProblemBank } from "./problemTypes";
+import { applyProblemProgression } from "./problemProgression";
 
 export const LATEST_BANK_VERSION = "v2";
 
@@ -21,7 +22,7 @@ export async function loadProblemBank(
 
   const bank = await loader();
   validateProblemBank(bank);
-  return bank;
+  return applyProblemProgression(bank);
 }
 
 export function validateProblemBank(bank: ProblemBank): void {

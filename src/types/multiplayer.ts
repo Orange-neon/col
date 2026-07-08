@@ -1,4 +1,5 @@
 import type { RaceEvent } from "./race";
+import type { AdaptiveProfiles } from "../data/adaptiveLearning";
 
 export type RoomStatus = "lobby" | "active" | "finished";
 export type RoomEndReason = "time" | "host" | "completed" | null;
@@ -11,6 +12,7 @@ export interface RoomMeta {
   topicIds?: string;
   problemCount: number;
   durationSeconds: number;
+  unlimited?: boolean;
   createdAt: number;
   startedAt: number | null;
   endsAt: number | null;
@@ -34,6 +36,7 @@ export interface PlayerProgress {
   score: number;
   solvedCount: number;
   solved: Record<string, number>;
+  adaptive?: AdaptiveProfiles;
 }
 
 export interface RoomSession {

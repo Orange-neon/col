@@ -1,25 +1,40 @@
-import { ArrowRight, Gamepad2, LoaderCircle, Radio, Users } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Gamepad2, LoaderCircle, LogIn, LogOut, Radio, UserRound, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import { getDefaultTopicSelection, type CurriculumTopicId } from "../data/curriculum";
 import type { ProblemBank } from "../data/problemTypes";
+import type { GoogleUserProfile } from "../lib/firebase";
 import { BrandLogo } from "./BrandLogo";
 import { TopicSelector } from "./TopicSelector";
 
 interface HomeScreenProps {
   bank: ProblemBank;
   configured: boolean;
+  authUser: GoogleUserProfile | null;
+  authLoading: boolean;
+  onSignIn: () => Promise<void>;
+  onSignOut: () => Promise<void>;
   onSolo: (topics: CurriculumTopicId[]) => void;
   onCreateRoom: (topics: CurriculumTopicId[]) => Promise<void>;
   onJoinRoom: (code: string, nickname: string) => Promise<void>;
 }
 
-export function HomeScreen({ bank, configured, onSolo, onCreateRoom, onJoinRoom }: HomeScreenProps) {
+export function HomeScreen({
+  bank,
+  configured,
+  authUser,
+  authLoading,
+  onSignIn,
+  onSignOut,
+  onSolo,
+  onCreateRoom,
+  onJoinRoom,
+}: HomeScreenProps) {
   const [code, setCode] = useState("");
   const [nickname, setNickname] = useState("");
   const [topics, setTopics] = useState<CurriculumTopicId[]>(() =>
     getDefaultTopicSelection(bank),
   );
-  const [busy, setBusy] = useState<"create" | "join" | null>(null);
+  const [busy, setBusy] = useState<"auth" | "create" | "join" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const perform = async (kind: "create" | "join", action: () => Promise<void>) => {
@@ -29,6 +44,22 @@ export function HomeScreen({ bank, configured, onSolo, onCreateRoom, onJoinRoom 
       await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+      setBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    if (authUser && !nickname) setNickname(authUser.displayName.slice(0, 20));
+  }, [authUser, nickname]);
+
+  const performAuth = async (action: () => Promise<void>) => {
+    setBusy("auth");
+    setError(null);
+    try {
+      await action();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
       setBusy(null);
     }
   };
@@ -43,11 +74,42 @@ export function HomeScreen({ bank, configured, onSolo, onCreateRoom, onJoinRoom 
           />
           <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">Col</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">
-            Race your classmates up a mountain of beginner Python challenges.
+            Race your classmates through Python challenges that adapt as each student grows.
           </p>
         </div>
 
         <TopicSelector bank={bank} selected={topics} onChange={setTopics} />
+
+        {configured && (
+          <section className="panel mb-4 flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              {authUser?.photoURL ? (
+                <img src={authUser.photoURL} alt="" className="size-10 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="grid size-10 place-items-center rounded-full bg-sky-400/10 text-sky-300">
+                  <UserRound size={20} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-bold text-white">
+                  {authLoading ? "Checking sign-in…" : authUser ? authUser.displayName : "Google sign-in required"}
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {authUser ? authUser.email : "Sign in to create, join, and resume multiplayer rooms."}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={authLoading || busy !== null}
+              onClick={() => performAuth(authUser ? onSignOut : onSignIn)}
+              className="flex items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2.5 text-sm font-black text-sky-200 disabled:opacity-40"
+            >
+              {busy === "auth" ? <LoaderCircle size={16} className="animate-spin" /> : authUser ? <LogOut size={16} /> : <LogIn size={16} />}
+              {authUser ? "Sign out" : "Continue with Google"}
+            </button>
+          </section>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <section className="panel p-6">
@@ -77,12 +139,12 @@ export function HomeScreen({ bank, configured, onSolo, onCreateRoom, onJoinRoom 
               />
               <button
                 type="button"
-                disabled={!configured || busy !== null}
+                disabled={!configured || !authUser || busy !== null}
                 onClick={() => perform("join", () => onJoinRoom(code, nickname))}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-black text-slate-950 hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {busy === "join" ? <LoaderCircle size={17} className="animate-spin" /> : <ArrowRight size={17} />}
-                Join room
+                Join or resume room
               </button>
             </div>
           </section>
@@ -99,7 +161,7 @@ export function HomeScreen({ bank, configured, onSolo, onCreateRoom, onJoinRoom 
             </div>
             <button
               type="button"
-              disabled={!configured || busy !== null}
+              disabled={!configured || !authUser || busy !== null}
               onClick={() => perform("create", () => onCreateRoom(topics))}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-200 hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
             >

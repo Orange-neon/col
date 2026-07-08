@@ -2,9 +2,12 @@ import confetti from "canvas-confetti";
 import {
   AlertTriangle,
   ArrowLeft,
+  Clock3,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
   Sparkles,
+  Trophy,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { BrandLogo } from "./components/BrandLogo";
@@ -25,6 +28,7 @@ import {
 } from "./data/curriculum";
 import { DIFFICULTY_CONFIG } from "./data/difficulty";
 import { loadProblemBank } from "./data/problemBank";
+import { getProblemBonus, getProblemReward } from "./data/problemProgression";
 import type { Difficulty, Problem, ProblemBank } from "./data/problemTypes";
 import { useLocalRace } from "./hooks/useLocalRace";
 import { useMultiplayerRace } from "./hooks/useMultiplayerRace";
@@ -32,10 +36,25 @@ import { usePyodide } from "./hooks/usePyodide";
 import { useRaceRoom } from "./hooks/useRaceRoom";
 import { compareOutput } from "./lib/judge";
 import { formatCountdown } from "./lib/raceLogic";
+import {
+  createSoloDeadline,
+  getSoloSecondsRemaining,
+  SOLO_DURATION_SECONDS,
+} from "./lib/soloTimer";
 import type { RoomMeta, RoomSession } from "./types/multiplayer";
 import type { RaceController } from "./types/race";
 
 type PythonController = ReturnType<typeof usePyodide>;
+
+const SOLO_DEADLINE_KEY = "col.solo-deadline.v1";
+
+function readSoloDeadline(): { endsAt: number; fresh: boolean } {
+  const stored = Number(localStorage.getItem(SOLO_DEADLINE_KEY));
+  if (Number.isFinite(stored) && stored > 0) return { endsAt: stored, fresh: false };
+  const endsAt = createSoloDeadline();
+  localStorage.setItem(SOLO_DEADLINE_KEY, String(endsAt));
+  return { endsAt, fresh: true };
+}
 
 function useCountdown(
   meta: RoomMeta,
@@ -171,6 +190,7 @@ function GameShell({
       const { actual, expected } = comparison;
 
       if (result.error || !comparison.passed) {
+        await Promise.resolve(race.recordMiss?.(problem)).catch(() => undefined);
         setOutput(
           [
             `✗ Test ${index + 1} failed`,
@@ -196,14 +216,15 @@ function GameShell({
       }
     }
 
-    const points = DIFFICULTY_CONFIG[problem.difficulty].points;
+    const points = getProblemReward(problem);
+    const bonus = getProblemBonus(problem);
     try {
       await race.solve(problem);
-      setOutput(`✓ All ${problem.testCases.length} tests passed!\n+${points} points — summit reached.`);
+      setOutput(`✓ All ${problem.testCases.length} tests passed!\n+${points} points (${bonus} difficulty bonus) — summit reached.`);
       notify({
         tone: "success",
         title: `+${points} points`,
-        message: `${problem.title} completed successfully.`,
+        message: `${problem.title} completed with a +${bonus} difficulty bonus.`,
       });
       confetti({
         particleCount: 110,
@@ -326,9 +347,33 @@ function GameShell({
 }
 
 function LocalGame({ bank, onExit }: { bank: ProblemBank; onExit: () => void }) {
+  const [timer, setTimer] = useState(readSoloDeadline);
+  const [seconds, setSeconds] = useState(() =>
+    getSoloSecondsRemaining(timer.endsAt),
+  );
   const python = usePyodide();
-  const race = useLocalRace(bank);
+  const race = useLocalRace(bank, seconds > 0);
   const { confirm, notify } = useFeedback();
+
+  useEffect(() => {
+    if (timer.fresh) race.reset();
+  }, [race.reset, timer.fresh]);
+
+  useEffect(() => {
+    const update = () => setSeconds(getSoloSecondsRemaining(timer.endsAt));
+    update();
+    const intervalId = window.setInterval(update, 500);
+    return () => window.clearInterval(intervalId);
+  }, [timer.endsAt]);
+
+  const beginNewSprint = () => {
+    const endsAt = createSoloDeadline();
+    localStorage.setItem(SOLO_DEADLINE_KEY, String(endsAt));
+    race.reset();
+    setTimer({ endsAt, fresh: false });
+    setSeconds(SOLO_DURATION_SECONDS);
+  };
+
   const resetRace = async () => {
     const confirmed = await confirm({
       title: "Reset your solo race?",
@@ -337,16 +382,39 @@ function LocalGame({ bank, onExit }: { bank: ProblemBank; onExit: () => void }) 
       tone: "danger",
     });
     if (confirmed) {
-      race.reset();
-      notify({ tone: "success", title: "Solo race reset", message: "A fresh trail is ready." });
+      beginNewSprint();
+      notify({ tone: "success", title: "Solo race reset", message: "A fresh five-minute sprint is ready." });
     }
   };
+
+  if (seconds === 0) {
+    return (
+      <main className="grid-glow min-h-screen bg-[#070b16] px-4 py-12 text-slate-100">
+        <div className="mx-auto w-full max-w-2xl text-center">
+          <BrandLogo className="mx-auto size-16 rounded-2xl object-contain shadow-xl shadow-sky-500/20" />
+          <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-sky-300">Solo sprint complete</p>
+          <h1 className="mt-2 text-4xl font-black text-white">Time's up!</h1>
+          <p className="mt-3 text-sm text-slate-400">Your five-minute practice result is frozen below.</p>
+          <div className="panel mt-8 grid grid-cols-3 gap-3 p-5">
+            <div><Trophy className="mx-auto text-amber-300" size={22} /><strong className="mt-2 block text-2xl text-white">{race.score}</strong><span className="text-xs text-slate-500">points</span></div>
+            <div><Sparkles className="mx-auto text-sky-300" size={22} /><strong className="mt-2 block text-2xl text-white">{race.solvedIds.length}</strong><span className="text-xs text-slate-500">solved</span></div>
+            <div><Clock3 className="mx-auto text-violet-300" size={22} /><strong className="mt-2 block text-2xl text-white">5:00</strong><span className="text-xs text-slate-500">duration</span></div>
+          </div>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button type="button" onClick={beginNewSprint} className="flex items-center gap-2 rounded-xl bg-sky-400 px-5 py-3 text-sm font-black text-slate-950"><RotateCcw size={16} /> New sprint</button>
+            <button type="button" onClick={onExit} className="flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-300"><ArrowLeft size={16} /> Exit</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
   return (
     <GameShell
       bank={bank}
       race={race}
       python={python}
       simulated
+      timeRemaining={formatCountdown(seconds)}
       onReset={resetRace}
       onExit={onExit}
     />
@@ -363,7 +431,8 @@ function HostRoom({ room, session }: RoomPageProps) {
   const meta = room.meta!;
   const { confirm, notify } = useFeedback();
   const expire = useCallback(() => room.finishRace("time"), [room.finishRace]);
-  const timeRemaining = useCountdown(meta, room.serverNow, expire);
+  const countdown = useCountdown(meta, room.serverNow, expire);
+  const timeRemaining = meta.unlimited ? "Unlimited" : countdown;
   const closeRoom = async () => {
     const confirmed = await confirm({
       title: "Close this room?",
@@ -384,7 +453,9 @@ function HostRoom({ room, session }: RoomPageProps) {
         code={session.code}
         players={room.players}
         durationSeconds={meta.durationSeconds}
+        unlimited={Boolean(meta.unlimited)}
         onDurationChange={room.setDuration}
+        onUnlimitedChange={room.setUnlimited}
         onStart={room.startRace}
         onLeave={() => void closeRoom()}
       />
@@ -419,7 +490,8 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
   const python = usePyodide();
   const meta = room.meta!;
   const expire = useCallback(() => room.finishRace("time"), [room.finishRace]);
-  const timeRemaining = useCountdown(meta, room.serverNow, expire);
+  const countdown = useCountdown(meta, room.serverNow, expire);
+  const timeRemaining = meta.unlimited ? "Unlimited" : countdown;
 
   useEffect(() => {
     if (meta.status === "lobby") {
@@ -436,6 +508,7 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
         code={session.code}
         players={room.players}
         durationSeconds={meta.durationSeconds}
+        unlimited={Boolean(meta.unlimited)}
         pythonStatus={python.status}
         onRetryPython={python.retry}
         onLeave={() => void room.leaveRoom()}
@@ -479,6 +552,7 @@ function ActivePlayerGame({
     players: room.players,
     progress: room.progress,
     events: room.events,
+    recordMiss: room.recordMiss,
     recordSolve: room.recordSolve,
     recordForfeit: room.recordForfeit,
   });
@@ -547,6 +621,10 @@ function LoadedApp({ bank }: { bank: ProblemBank }) {
       <HomeScreen
         bank={bank}
         configured={room.configured}
+        authUser={room.authUser}
+        authLoading={room.authLoading}
+        onSignIn={room.signIn}
+        onSignOut={room.signOut}
         onSolo={setSoloTopics}
         onCreateRoom={async (topics) => {
           await room.createRoom(topics);

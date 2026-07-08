@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createAdaptiveProfiles,
+  normalizeAdaptiveProfile,
+  updateAdaptiveProfile,
+  type AdaptiveProfiles,
+} from "../data/adaptiveLearning";
 import { DIFFICULTY_CONFIG } from "../data/difficulty";
+import { getProblemReward } from "../data/problemProgression";
 import type { Difficulty, Problem, ProblemBank } from "../data/problemTypes";
 import { createBotAction } from "../lib/botSimulation";
 import { getRemainingCounts, pickUnsolvedProblem } from "../lib/raceLogic";
@@ -10,6 +17,7 @@ const LEGACY_STORAGE_KEY = "pyclimb.local-race.v0";
 
 interface PersistedRace {
   botSimulationVersion: number;
+  adaptiveProfiles: AdaptiveProfiles;
   score: number;
   solvedIds: string[];
   activeProblemId: string | null;
@@ -28,6 +36,7 @@ const INITIAL_BOTS = {
 
 const initialState: PersistedRace = {
   botSimulationVersion: 2,
+  adaptiveProfiles: createAdaptiveProfiles(),
   score: 0,
   solvedIds: [],
   activeProblemId: null,
@@ -50,6 +59,11 @@ function readRace(): PersistedRace {
     return {
       ...initialState,
       ...parsed,
+      adaptiveProfiles: {
+        easy: normalizeAdaptiveProfile(parsed.adaptiveProfiles?.easy),
+        medium: normalizeAdaptiveProfile(parsed.adaptiveProfiles?.medium),
+        hard: normalizeAdaptiveProfile(parsed.adaptiveProfiles?.hard),
+      },
       solvedIds: Array.isArray(parsed.solvedIds) ? parsed.solvedIds : [],
       botScores:
         parsed.botSimulationVersion === initialState.botSimulationVersion
@@ -66,10 +80,12 @@ function event(message: string, tone: RaceEvent["tone"]): RaceEvent {
   return { id: crypto.randomUUID(), message, tone, createdAt: Date.now() };
 }
 
-export function useLocalRace(bank: ProblemBank) {
+export function useLocalRace(bank: ProblemBank, active = true) {
   const [state, setState] = useState<PersistedRace>(readRace);
   const stateRef = useRef(state);
+  const activeRef = useRef(active);
   stateRef.current = state;
+  activeRef.current = active;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -93,6 +109,7 @@ export function useLocalRace(bank: ProblemBank) {
   }, [bank.problems]);
 
   useEffect(() => {
+    if (!active) return;
     let cancelled = false;
     const timeoutIds = new Set<number>();
 
@@ -127,7 +144,7 @@ export function useLocalRace(bank: ProblemBank) {
       cancelled = true;
       for (const timeoutId of timeoutIds) window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [active]);
 
   const activeProblem = useMemo(
     () => bank.problems.find((problem) => problem.id === state.activeProblemId) ?? null,
@@ -136,11 +153,13 @@ export function useLocalRace(bank: ProblemBank) {
 
   const selectProblem = useCallback(
     (difficulty: Difficulty): "selected" | "active" | "exhausted" => {
+      if (!activeRef.current) return "exhausted";
       if (stateRef.current.activeProblemId) return "active";
       const problem = pickUnsolvedProblem(
         bank.problems,
         difficulty,
         stateRef.current.solvedIds,
+        stateRef.current.adaptiveProfiles[difficulty],
       );
       if (!problem) return "exhausted";
       setState((current) => ({
@@ -155,12 +174,20 @@ export function useLocalRace(bank: ProblemBank) {
   );
 
   const solve = useCallback((problem: Problem) => {
-    const points = DIFFICULTY_CONFIG[problem.difficulty].points;
+    if (!activeRef.current) return;
+    const points = getProblemReward(problem);
     setState((current) => {
       if (current.solvedIds.includes(problem.id)) return current;
       return {
         ...current,
         score: current.score + points,
+        adaptiveProfiles: {
+          ...current.adaptiveProfiles,
+          [problem.difficulty]: updateAdaptiveProfile(
+            current.adaptiveProfiles[problem.difficulty],
+            "solved",
+          ),
+        },
         solvedIds: [...current.solvedIds, problem.id],
         activeProblemId: null,
         editorCode: "",
@@ -171,10 +198,18 @@ export function useLocalRace(bank: ProblemBank) {
   }, []);
 
   const forfeit = useCallback((problem: Problem) => {
+    if (!activeRef.current) return;
     const penalty = DIFFICULTY_CONFIG[problem.difficulty].penalty;
     setState((current) => ({
       ...current,
       score: current.score - penalty,
+      adaptiveProfiles: {
+        ...current.adaptiveProfiles,
+        [problem.difficulty]: updateAdaptiveProfile(
+          current.adaptiveProfiles[problem.difficulty],
+          "forfeited",
+        ),
+      },
       activeProblemId: null,
       editorCode: "",
       stdin: "",
@@ -186,6 +221,20 @@ export function useLocalRace(bank: ProblemBank) {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     setState({ ...initialState, botScores: { ...INITIAL_BOTS } });
+  }, []);
+
+  const recordMiss = useCallback((problem: Problem) => {
+    if (!activeRef.current) return;
+    setState((current) => ({
+      ...current,
+      adaptiveProfiles: {
+        ...current.adaptiveProfiles,
+        [problem.difficulty]: updateAdaptiveProfile(
+          current.adaptiveProfiles[problem.difficulty],
+          "missed",
+        ),
+      },
+    }));
   }, []);
 
   const racers = useMemo<Racer[]>(
@@ -213,6 +262,7 @@ export function useLocalRace(bank: ProblemBank) {
     selectProblem,
     solve,
     forfeit,
+    recordMiss,
     reset,
     setEditorCode: (editorCode: string) => setState((current) => ({ ...current, editorCode })),
     setStdin: (stdin: string) => setState((current) => ({ ...current, stdin })),

@@ -44,6 +44,7 @@ interface MultiplayerRaceOptions {
   players: RoomPlayer[];
   progress: PlayerProgress;
   events: RaceEvent[];
+  recordMiss: (problem: Problem) => Promise<void>;
   recordSolve: (problem: Problem) => Promise<void>;
   recordForfeit: (problem: Problem) => Promise<void>;
 }
@@ -54,6 +55,7 @@ export function useMultiplayerRace({
   players,
   progress,
   events,
+  recordMiss,
   recordSolve,
   recordForfeit,
 }: MultiplayerRaceOptions) {
@@ -75,7 +77,12 @@ export function useMultiplayerRace({
   const selectProblem = useCallback(
     (difficulty: Difficulty): "selected" | "active" | "exhausted" => {
       if (draft.activeProblemId) return "active";
-      const problem = pickUnsolvedProblem(bank.problems, difficulty, solvedIds);
+      const problem = pickUnsolvedProblem(
+        bank.problems,
+        difficulty,
+        solvedIds,
+        progress.adaptive?.[difficulty],
+      );
       if (!problem) return "exhausted";
       setDraft({
         activeProblemId: problem.id,
@@ -84,7 +91,7 @@ export function useMultiplayerRace({
       });
       return "selected";
     },
-    [bank.problems, draft.activeProblemId, solvedIds],
+    [bank.problems, draft.activeProblemId, progress.adaptive, solvedIds],
   );
 
   const solve = useCallback(
@@ -132,6 +139,7 @@ export function useMultiplayerRace({
     remaining,
     events,
     selectProblem,
+    recordMiss,
     solve,
     forfeit,
     setEditorCode: (editorCode: string) => setDraft((current) => ({ ...current, editorCode })),

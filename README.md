@@ -1,6 +1,6 @@
 # Col
 
-Col is a static Vite/React Python race. Solo Practice works without configuration. Multiplayer rooms use Firebase Anonymous Authentication and Realtime Database on the no-cost Spark plan.
+Col is a static Vite/React Python race. Solo Practice works without configuration. Multiplayer rooms use Firebase Google Authentication and Realtime Database on the no-cost Spark plan.
 
 ## Local development
 
@@ -19,10 +19,11 @@ npm.cmd run preview
 ## Enable multiplayer
 
 1. Create a Firebase project on the Spark plan and register a Web app.
-2. Enable Authentication → Sign-in method → Anonymous.
+2. Enable Authentication → Sign-in method → Google and choose a project support email.
 3. Create a Realtime Database.
 4. Copy `.env.example` to `.env.local` and add the Web app values, including the Realtime Database URL.
-5. Deploy `database.rules.json` to that database with the Firebase CLI or paste the rules into the Firebase console.
+5. Add every production hostname under Authentication → Settings → Authorized domains.
+6. Deploy `database.rules.json` to that database with the Firebase CLI or paste the rules into the Firebase console.
 
 Firebase Web configuration identifies the project but is not a private server secret. Database access is controlled by Authentication and `database.rules.json`.
 
@@ -46,16 +47,19 @@ The workflow runs problem validation, unit tests, TypeScript, and the production
 npm.cmd run check
 ```
 
-This command runs the deterministic judging, selection, ranking, countdown, and bank tests before building the GitHub Pages export.
+This command runs judging, adaptive selection, ranking, countdown, and bank tests before building the GitHub Pages export.
 
 ## Current milestone
 
 - 210 challenges in v2 (70 per difficulty), including Functions, Modules, and Classes
 - Monaco editor and a pinned Pyodide v0.25.0 Web Worker
 - Ordered curriculum topic selection with automatic prerequisite inclusion
-- Solo race with simulated peers and browser persistence
-- Multiplayer create/join lobby, readiness, shared timer, live standings, stop, results, and rematch
+- Randomized adaptive progression within each tier, with safe onboarding, stretch challenges, and per-problem difficulty bonuses
+- Five-minute solo sprints with simulated peers, persistent countdown, and frozen results
+- Google-authenticated multiplayer with cross-device resume, timed or unlimited rooms, live standings, results, and rematches
 
 The original 90-problem v1 bank remains immutable. The current v2 bank adds 120 distinct challenges and keeps v1 available for active rooms.
+
+Adaptive selection runs entirely in the app—no AI or paid API is used. Solo profiles remain in local storage. Signed-in room players store a small per-difficulty profile in Realtime Database so their level follows them when they resume on another device. Solves and streaks move the challenge window upward; failed submissions and forfeits move it back toward productive practice. The final problem is still randomly sampled from that window, so students following the same topics and difficulty do not receive a fixed identical sequence.
 
 Problem maintainers should follow [docs/AUTHORING_PROBLEMS.md](docs/AUTHORING_PROBLEMS.md). Published banks are versioned so active rooms are not changed by later edits.

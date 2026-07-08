@@ -1,3 +1,4 @@
+import { selectAdaptiveProblem, type AdaptiveProfile } from "../data/adaptiveLearning";
 import type { Difficulty, Problem } from "../data/problemTypes";
 import type { RoomPlayer } from "../types/multiplayer";
 
@@ -26,15 +27,10 @@ export function pickUnsolvedProblem(
   problems: Problem[],
   difficulty: Difficulty,
   solvedIds: Iterable<string>,
+  profile?: Partial<AdaptiveProfile> | null,
   random: () => number = Math.random,
 ): Problem | null {
-  const solved = new Set(solvedIds);
-  const candidates = problems.filter(
-    (problem) => problem.difficulty === difficulty && !solved.has(problem.id),
-  );
-  if (!candidates.length) return null;
-  const index = Math.min(candidates.length - 1, Math.floor(random() * candidates.length));
-  return candidates[index];
+  return selectAdaptiveProblem(problems, difficulty, solvedIds, profile, random);
 }
 
 export function sortRoomPlayers(players: RoomPlayer[]): RoomPlayer[] {

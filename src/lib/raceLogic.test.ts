@@ -8,7 +8,7 @@ import {
   sortRoomPlayers,
 } from "./raceLogic";
 
-const problem = (id: string, difficulty: Problem["difficulty"]): Problem => ({
+const problem = (id: string, difficulty: Problem["difficulty"], progressionOrder?: number): Problem => ({
   id,
   difficulty,
   title: id,
@@ -17,6 +17,7 @@ const problem = (id: string, difficulty: Problem["difficulty"]): Problem => ({
   starterCode: "print()",
   solutionCode: "print()",
   testCases: [{ input: "", expectedOutput: "" }],
+  progressionOrder,
 });
 
 const player = (overrides: Partial<RoomPlayer>): RoomPlayer => ({
@@ -36,7 +37,13 @@ describe("problem selection", () => {
   const problems = [problem("e1", "easy"), problem("e2", "easy"), problem("m1", "medium")];
 
   it("never selects a solved problem", () => {
-    expect(pickUnsolvedProblem(problems, "easy", ["e1"], () => 0)?.id).toBe("e2");
+    expect(pickUnsolvedProblem(problems, "easy", ["e1"])?.id).toBe("e2");
+  });
+
+  it("selects the easiest unsolved problem instead of choosing randomly", () => {
+    const ranked = [problem("later", "easy", 8), problem("first", "easy", 2), problem("middle", "easy", 5)];
+    expect(pickUnsolvedProblem(ranked, "easy", [], undefined, () => 0)?.id).toBe("first");
+    expect(pickUnsolvedProblem(ranked, "easy", ["first"], undefined, () => 0)?.id).toBe("middle");
   });
 
   it("returns null after a tier is exhausted", () => {
