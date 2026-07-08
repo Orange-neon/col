@@ -31,10 +31,12 @@ describe("curriculum topic selection", () => {
   it("classifies and filters the existing bank without losing problems", async () => {
     const bank = await loadProblemBank();
     const counts = getTopicCounts(bank);
-    expect(Object.values(counts).reduce((total, count) => total + count, 0)).toBe(90);
+    expect(Object.values(counts).reduce((total, count) => total + count, 0)).toBe(210);
     expect(counts["dictionaries"]).toBeGreaterThan(0);
-    expect(counts.functions).toBe(0);
-    expect(filterProblemBankByTopics(bank, getDefaultTopicSelection(bank)).problems).toHaveLength(90);
+    expect(counts.functions).toBeGreaterThan(0);
+    expect(counts.modules).toBeGreaterThan(0);
+    expect(counts.classes).toBeGreaterThan(0);
+    expect(filterProblemBankByTopics(bank, getDefaultTopicSelection(bank)).problems).toHaveLength(210);
   });
 
   it("places representative problems in their teaching topics", async () => {

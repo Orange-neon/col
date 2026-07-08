@@ -50,12 +50,12 @@ This command runs the deterministic judging, selection, ranking, countdown, and 
 
 ## Current milestone
 
-- 90 beginner challenges in the first release bank, v1 (30 per difficulty)
+- 210 challenges in v2 (70 per difficulty), including Functions, Modules, and Classes
 - Monaco editor and a pinned Pyodide v0.25.0 Web Worker
 - Ordered curriculum topic selection with automatic prerequisite inclusion
 - Solo race with simulated peers and browser persistence
 - Multiplayer create/join lobby, readiness, shared timer, live standings, stop, results, and rematch
 
-The planned 90-problem bank is complete. New revisions should be created as another immutable bank version.
+The original 90-problem v1 bank remains immutable. The current v2 bank adds 120 distinct challenges and keeps v1 available for active rooms.
 
 Problem maintainers should follow [docs/AUTHORING_PROBLEMS.md](docs/AUTHORING_PROBLEMS.md). Published banks are versioned so active rooms are not changed by later edits.

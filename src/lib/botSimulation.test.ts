@@ -9,8 +9,8 @@ function sequence(...values: number[]) {
 describe("solo bot simulation", () => {
   it.each([
     [0.1, "easy", 100],
-    [0.6, "medium", 300],
-    [0.9, "hard", 500],
+    [0.6, "medium", 450],
+    [0.9, "hard", 900],
   ] as const)("awards only the configured tier points", (roll, difficulty, points) => {
     const action = createBotAction(sequence(roll, 0.9, 0));
     expect(action).toMatchObject({ difficulty, delta: points, forfeited: false });
@@ -18,8 +18,8 @@ describe("solo bot simulation", () => {
 
   it.each([
     [0.1, "easy", -50],
-    [0.6, "medium", -150],
-    [0.9, "hard", -250],
+    [0.6, "medium", -50],
+    [0.9, "hard", -50],
   ] as const)("occasionally subtracts the tier penalty", (roll, difficulty, penalty) => {
     const action = createBotAction(sequence(roll, 0.1, 0));
     expect(action).toMatchObject({ difficulty, delta: penalty, forfeited: true });

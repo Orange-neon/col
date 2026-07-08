@@ -1,9 +1,10 @@
 import type { ProblemBank } from "./problemTypes";
 
-export const LATEST_BANK_VERSION = "v1";
+export const LATEST_BANK_VERSION = "v2";
 
 const bankLoaders: Record<string, () => Promise<ProblemBank>> = {
   v1: async () => (await import("./banks/v1")).problemBank,
+  v2: async () => (await import("./banks/v2")).problemBank,
 };
 
 export function getAvailableBankVersions(): string[] {
@@ -25,6 +26,7 @@ export async function loadProblemBank(
 
 export function validateProblemBank(bank: ProblemBank): void {
   const ids = new Set<string>();
+  const titles = new Set<string>();
 
   if (!bank.version || bank.problems.length === 0) {
     throw new Error("The problem bank must have a version and at least one problem.");
@@ -35,6 +37,11 @@ export function validateProblemBank(bank: ProblemBank): void {
       throw new Error(`Duplicate problem ID: ${problem.id}`);
     }
     ids.add(problem.id);
+    const normalizedTitle = problem.title.trim().toLowerCase();
+    if (titles.has(normalizedTitle)) {
+      throw new Error(`Duplicate problem title: ${problem.title}`);
+    }
+    titles.add(normalizedTitle);
 
     if (
       !problem.title ||

@@ -27,7 +27,7 @@ const INITIAL_BOTS = {
 };
 
 const initialState: PersistedRace = {
-  botSimulationVersion: 1,
+  botSimulationVersion: 2,
   score: 0,
   solvedIds: [],
   activeProblemId: null,

@@ -5,8 +5,8 @@ export const DIFFICULTY_CONFIG: Record<
   { label: string; points: number; penalty: number }
 > = {
   easy: { label: "Easy", points: 100, penalty: 50 },
-  medium: { label: "Medium", points: 300, penalty: 150 },
-  hard: { label: "Hard", points: 500, penalty: 250 },
+  medium: { label: "Medium", points: 450, penalty: 50 },
+  hard: { label: "Hard", points: 900, penalty: 50 },
 };
 
 export const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];

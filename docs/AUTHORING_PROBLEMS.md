@@ -11,7 +11,7 @@ Edit `easy.ts`, `medium.ts`, or `hard.ts` in the new version folder. Each proble
 - a permanent kebab-case `id`;
 - a beginner-friendly title and topic tags;
 - Markdown instructions with `Input` and `Output` sections;
-- runnable starter and solution code requiring no imports;
+- runnable starter and solution code; standard-library imports are allowed for module-focused problems;
 - at least three distinct stdin/stdout test cases.
 
 Difficulty controls points and penalties centrally through `src/data/difficulty.ts`. Moving an object to another tier requires updating its `difficulty` field as well.

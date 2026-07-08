@@ -19,16 +19,30 @@ describe("versioned problem banks", () => {
     ).toEqual({ easy: 30, medium: 30, hard: 30 });
   });
 
-  it("uses v1 as the sole release bank", async () => {
-    expect(LATEST_BANK_VERSION).toBe("v1");
-    expect(getAvailableBankVersions()).toEqual(["v1"]);
-    expect((await loadProblemBank()).version).toBe("v1");
+  it("loads the 210-problem v2 bank with balanced difficulty tiers", async () => {
+    const bank = await loadProblemBank("v2");
+    expect(bank.problems).toHaveLength(210);
+    expect(
+      bank.problems.reduce<Record<string, number>>((counts, problem) => {
+        counts[problem.difficulty] = (counts[problem.difficulty] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({ easy: 70, medium: 70, hard: 70 });
   });
 
-  it("has unique IDs and at least three tests in the latest bank", async () => {
+  it("keeps v1 available while using v2 as the latest release", async () => {
+    expect(LATEST_BANK_VERSION).toBe("v2");
+    expect(getAvailableBankVersions()).toEqual(["v1", "v2"]);
+    expect((await loadProblemBank()).version).toBe("v2");
+  });
+
+  it("has distinct IDs and titles, examples, and at least three tests", async () => {
     const bank = await loadProblemBank();
     const ids = bank.problems.map((problem) => problem.id);
+    const titles = bank.problems.map((problem) => problem.title.toLowerCase());
     expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(bank.problems.every((problem) => problem.description.includes("### Example"))).toBe(true);
     expect(bank.problems.every((problem) => problem.testCases.length >= 3)).toBe(true);
   });
 });

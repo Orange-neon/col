@@ -55,11 +55,11 @@ for (const version of versions) {
     if (!problem.description.includes("## Input") || !problem.description.includes("## Output")) {
       errors.push(`${problem.id}: description must document Input and Output.`);
     }
+    if (!problem.description.includes("### Example")) {
+      errors.push(`${problem.id}: description must include an example test case.`);
+    }
     if (problem.testCases.length < 3) {
       errors.push(`${problem.id}: add at least three test cases.`);
-    }
-    if (/(^|\n)\s*(?:from\s+\S+\s+import|import\s+\S+)/.test(problem.solutionCode)) {
-      errors.push(`${problem.id}: reference solutions must not use imports.`);
     }
     const inputs = new Set<string>();
     for (const [index, testCase] of problem.testCases.entries()) {
