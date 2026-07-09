@@ -164,7 +164,7 @@ export function useMultiplayerRace({
         draft.timedDeadline !== null &&
         Date.now() > draft.timedDeadline
       ) {
-        throw new Error("The bomb timer expired before the solution was submitted.");
+        throw new Error("The speed timer expired before the solution was submitted.");
       }
       const points = isChallenge
         ? await recordChallengeSolve(problem)

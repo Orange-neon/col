@@ -6,7 +6,7 @@ describe("timed problem types", () => {
     expect(TIMED_PROBLEM_SECONDS).toEqual({ easy: 60, medium: 90, hard: 120 });
   });
 
-  it("keeps bombs in the easier band and doubles in the harder band", () => {
+  it("keeps speed penalties in the easier band and lightning doubles in the harder band", () => {
     const modes = Array.from({ length: 100 }, (_, index) => ({
       index,
       mode: timedModeForPosition("v4", index, 100),
@@ -14,7 +14,7 @@ describe("timed problem types", () => {
     expect(modes.some(({ mode }) => mode === "bomb")).toBe(true);
     expect(modes.some(({ mode }) => mode === "double")).toBe(true);
     expect(modes.filter(({ mode }) => mode === "bomb").every(({ index }) => index <= 35)).toBe(true);
-    expect(modes.filter(({ mode }) => mode === "double").every(({ index }) => index >= 65)).toBe(true);
+    expect(modes.filter(({ mode }) => mode === "double").every(({ index }) => index >= 55)).toBe(true);
   });
 
   it("does not change timed behavior in immutable older banks", () => {

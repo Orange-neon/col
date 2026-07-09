@@ -28,6 +28,6 @@ export function timedModeForPosition(
   if (Number(bankVersion.slice(1)) < 4 || count < 12) return undefined;
   const percentile = index / Math.max(1, count - 1);
   if (percentile <= 0.35 && index % 7 === 3) return "bomb";
-  if (percentile >= 0.65 && index % 7 === 5) return "double";
+  if (percentile >= 0.55 && index % 4 === 1) return "double";
   return undefined;
 }

@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { BookOpen, Braces } from "lucide-react";
+import { Bomb, BookOpen, Braces, Zap } from "lucide-react";
 import { DIFFICULTY_CONFIG } from "../data/difficulty";
 import { getProblemBonus, getProblemReward } from "../data/problemProgression";
 import type { Problem } from "../data/problemTypes";
@@ -34,8 +34,20 @@ export function Workspace({ problem, code, onCodeChange }: WorkspaceProps) {
       <div className="min-h-0 overflow-y-auto border-b border-slate-700/70 p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
           <span className="flex items-center gap-2"><BookOpen size={15} /> Problem {problem.progressionOrder ?? ""}</span>
-          <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] tracking-wider text-amber-200">
-            +{getProblemReward(problem)} points · {DIFFICULTY_CONFIG[problem.difficulty].points} base + {getProblemBonus(problem)} bonus
+          <span className="flex flex-wrap items-center gap-2">
+            {problem.timedMode && (
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] tracking-wider ${
+                problem.timedMode === "double"
+                  ? "border-amber-300/40 bg-amber-300/15 text-amber-100"
+                  : "border-rose-300/35 bg-rose-300/10 text-rose-100"
+              }`}>
+                {problem.timedMode === "double" ? <Zap size={12} /> : <Bomb size={12} />}
+                {problem.timedMode === "double" ? "⚡ 2× lightning" : "Speed"}
+              </span>
+            )}
+            <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[10px] tracking-wider text-amber-200">
+              +{getProblemReward(problem)} points · {DIFFICULTY_CONFIG[problem.difficulty].points} base + {getProblemBonus(problem)} bonus
+            </span>
           </span>
         </div>
         <ProblemDescription markdown={problem.description} />

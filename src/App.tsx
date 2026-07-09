@@ -167,11 +167,11 @@ function GameShell({
           setOutput(`💥 Time expired. ${BOMB_PENALTY} points deducted.`);
           notify({
             tone: "error",
-            title: "Bomb exploded",
+            title: "Speed timer expired",
             message: `${BOMB_PENALTY} points were deducted. Choose another climb when you're ready.`,
           });
         }).catch((reason) => {
-          setOutput(`The bomb expired, but the penalty could not be saved:\n${reason instanceof Error ? reason.message : String(reason)}`);
+          setOutput(`The speed timer expired, but the penalty could not be saved:\n${reason instanceof Error ? reason.message : String(reason)}`);
           notify({
             tone: "error",
             title: "Penalty could not be saved",
@@ -364,7 +364,7 @@ function GameShell({
         }`}>
           <span className="flex items-center gap-2">
             {race.activeProblem.timedMode === "bomb" ? <Bomb size={18} /> : <Zap size={18} />}
-            {race.activeProblem.timedMode === "bomb" ? "Bomb problem" : "2× bonus problem"}
+            {race.activeProblem.timedMode === "bomb" ? "Speed problem" : "⚡ 2× lightning problem"}
           </span>
           <span className="font-mono text-lg">{formatCountdown(timedSeconds)}</span>
         </div>
@@ -446,7 +446,7 @@ function GameShell({
             </div>
             <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-slate-500">Timed problem ahead</p>
             <h2 className="mt-2 text-2xl font-black text-white">
-              {race.pendingProblem.timedMode === "bomb" ? "Defuse the bomb" : "Double-point sprint"}
+              {race.pendingProblem.timedMode === "bomb" ? "Speed challenge" : "⚡ Lightning 2× sprint"}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">
               You will have {formatCountdown(TIMED_PROBLEM_SECONDS[race.pendingProblem.difficulty])} once you start. {race.pendingProblem.timedMode === "bomb"

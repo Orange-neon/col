@@ -213,7 +213,7 @@ export function useLocalRace(bank: ProblemBank, active = true) {
       stateRef.current.timedDeadline !== null &&
       Date.now() > stateRef.current.timedDeadline
     ) {
-      throw new Error("The bomb timer expired before the solution was submitted.");
+      throw new Error("The speed timer expired before the solution was submitted.");
     }
     const awardedPoints = getTimedProblemReward(
       getProblemReward(problem),
@@ -289,7 +289,7 @@ export function useLocalRace(bank: ProblemBank, active = true) {
             "forfeited",
           ),
         },
-        events: [event(`${problem.title} exploded (-${BOMB_PENALTY})`, "bad"), ...current.events].slice(0, 12),
+        events: [event(`${problem.title} speed timer expired (-${BOMB_PENALTY})`, "bad"), ...current.events].slice(0, 12),
       };
     });
   }, []);

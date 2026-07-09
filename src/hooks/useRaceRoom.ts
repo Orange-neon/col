@@ -620,7 +620,7 @@ export function useRaceRoom(bank: ProblemBank) {
       await db.update(db.ref(database, `rooms/${session.code}/leaderboard/${session.uid}`), {
         score: next.score,
       });
-      await addEvent(`${session.nickname}'s ${problem.title} bomb exploded (-${BOMB_PENALTY})`, "bad");
+      await addEvent(`${session.nickname}'s ${problem.title} speed timer expired (-${BOMB_PENALTY})`, "bad");
     },
     [addEvent, meta?.status, session],
   );
