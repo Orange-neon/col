@@ -85,6 +85,10 @@ function normalizeNickname(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function hasGoogleProvider(user: { providerData: Array<{ providerId: string }> }): boolean {
+  return user.providerData.some((provider) => provider.providerId === "google.com");
+}
+
 export function useRaceRoom(bank: ProblemBank) {
   const [session, setSessionState] = useState<RoomSession | null>(readSession);
   const [authUser, setAuthUser] = useState<GoogleUserProfile | null>(null);
@@ -136,10 +140,6 @@ export function useRaceRoom(bank: ProblemBank) {
       unsubscribe?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (!authLoading && !authUser && session) saveSession(null);
-  }, [authLoading, authUser, saveSession, session]);
 
   const signIn = useCallback(async () => {
     const user = await signInWithGoogle();
@@ -347,12 +347,20 @@ export function useRaceRoom(bank: ProblemBank) {
       const { database, user, db } = await getFirebaseContext();
       const { get, push, ref, set, update } = db;
       const roomRef = ref(database, `rooms/${code}`);
-      const snapshot = await get(roomRef);
+      const snapshot = await get(roomRef).catch((reason) => {
+        if (!hasGoogleProvider(user)) {
+          throw new Error("Sign in with Google to join an unlimited room, or check the room code.");
+        }
+        throw reason;
+      });
       if (!snapshot.exists()) throw new Error("Room not found.");
       const room = snapshot.val() as {
         meta: RoomMeta;
         leaderboard?: Record<string, RoomPlayer>;
       };
+      if (room.meta.unlimited && !hasGoogleProvider(user)) {
+        throw new Error("Sign in with Google to join unlimited rooms.");
+      }
       const roomBank = await loadProblemBank(room.meta.bankVersion).catch(() => {
         throw new Error(`This build does not include problem bank ${room.meta.bankVersion}.`);
       });
@@ -452,15 +460,26 @@ export function useRaceRoom(bank: ProblemBank) {
   const setUnlimited = useCallback(
     async (unlimited: boolean) => {
       if (!session || session.role !== "host" || meta?.status !== "lobby") return;
-      const { database, db } = await getFirebaseContext();
+      if (unlimited && !authUser) {
+        const user = await signInWithGoogle();
+        setAuthUser(user);
+      }
+      const { database, user, db } = await getFirebaseContext({ requireGoogle: unlimited });
+      if (unlimited && user.uid !== session.uid) {
+        saveSession(null);
+        throw new Error("This Google account cannot manage the current room. Create a new room after signing in.");
+      }
       await db.set(db.ref(database, `rooms/${session.code}/meta/unlimited`), unlimited);
     },
-    [meta?.status, session],
+    [authUser, meta?.status, saveSession, session],
   );
 
   const startRace = useCallback(async () => {
     if (!session || session.role !== "host" || !meta) return;
-    const { database, db } = await getFirebaseContext();
+    const { database, user, db } = await getFirebaseContext({ requireGoogle: Boolean(meta.unlimited) });
+    if (meta.unlimited && user.uid !== session.uid) {
+      throw new Error("Sign in with the room host account to start an unlimited room.");
+    }
     const { ref, update } = db;
     const now = Date.now() + serverOffsetRef.current;
     await update(ref(database, `rooms/${session.code}/meta`), {

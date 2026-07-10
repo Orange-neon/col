@@ -33,6 +33,36 @@ interface FirebaseContext extends FirebaseServices {
 
 let servicesPromise: Promise<FirebaseServices> | null = null;
 
+export function getFirebaseErrorMessage(reason: unknown): string {
+  const code = typeof reason === "object" && reason !== null && "code" in reason
+    ? String((reason as { code?: unknown }).code)
+    : "";
+
+  if (code === "auth/operation-not-allowed") {
+    return [
+      "A Firebase sign-in provider is not enabled for this project.",
+      "Enable Anonymous for timed rooms and Google for unlimited rooms in Firebase Console → Authentication → Sign-in method.",
+    ].join(" ");
+  }
+  if (code === "auth/admin-restricted-operation") {
+    return "Anonymous sign-in is not enabled for timed rooms. Enable it in Firebase Console → Authentication → Sign-in method.";
+  }
+  if (code === "auth/unauthorized-domain") {
+    return [
+      "This website domain is not authorized for Firebase sign-in.",
+      "Open Firebase Console → Authentication → Settings → Authorized domains and add this site's hostname.",
+    ].join(" ");
+  }
+  if (code === "auth/popup-blocked") {
+    return "The Google sign-in popup was blocked. Allow popups for this site, then try again.";
+  }
+  if (code === "auth/popup-closed-by-user") {
+    return "The Google sign-in popup was closed before sign-in finished.";
+  }
+  if (reason instanceof Error) return reason.message;
+  return String(reason);
+}
+
 function isGoogleUser(user: User | null): user is User {
   return Boolean(user?.providerData.some((provider) => provider.providerId === "google.com"));
 }
@@ -66,12 +96,19 @@ async function getFirebaseServices(): Promise<FirebaseServices> {
   return servicesPromise;
 }
 
-export async function getFirebaseContext(): Promise<FirebaseContext> {
+async function getCurrentOrAnonymousUser({ auth, authApi }: FirebaseServices): Promise<User> {
+  await auth.authStateReady();
+  if (auth.currentUser) return auth.currentUser;
+  return (await authApi.signInAnonymously(auth)).user;
+}
+
+export async function getFirebaseContext(
+  options: { requireGoogle?: boolean } = {},
+): Promise<FirebaseContext> {
   const services = await getFirebaseServices();
-  await services.auth.authStateReady();
-  const user = services.auth.currentUser;
-  if (!isGoogleUser(user)) {
-    throw new Error("Sign in with Google to use multiplayer.");
+  const user = await getCurrentOrAnonymousUser(services);
+  if (options.requireGoogle && !isGoogleUser(user)) {
+    throw new Error("Sign in with Google to use unlimited rooms.");
   }
   return { ...services, user };
 }

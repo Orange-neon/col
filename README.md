@@ -1,6 +1,6 @@
 # Col
 
-Col is a static Vite/React Python race. Solo Practice works without configuration. Multiplayer rooms use Firebase Google Authentication and Realtime Database on the no-cost Spark plan.
+Col is a static Vite/React Python race. Solo Practice works without configuration. Multiplayer rooms use Firebase Authentication and Realtime Database on the no-cost Spark plan.
 
 ## Local development
 
@@ -19,11 +19,12 @@ npm.cmd run preview
 ## Enable multiplayer
 
 1. Create a Firebase project on the Spark plan and register a Web app.
-2. Enable Authentication → Sign-in method → Google and choose a project support email.
-3. Create a Realtime Database.
-4. Copy `.env.example` to `.env.local` and add the Web app values, including the Realtime Database URL.
-5. Add every production hostname under Authentication → Settings → Authorized domains.
-6. Deploy `database.rules.json` to that database with the Firebase CLI or paste the rules into the Firebase console.
+2. Enable Authentication → Sign-in method → Anonymous for timed rooms.
+3. Enable Authentication → Sign-in method → Google and choose a project support email for unlimited rooms and cross-device resume.
+4. Create a Realtime Database.
+5. Copy `.env.example` to `.env.local` and add the Web app values, including the Realtime Database URL.
+6. Add every production hostname under Authentication → Settings → Authorized domains.
+7. Deploy `database.rules.json` to that database with the Firebase CLI or paste the rules into the Firebase console.
 
 Firebase Web configuration identifies the project but is not a private server secret. Database access is controlled by Authentication and `database.rules.json`.
 
@@ -57,8 +58,8 @@ This command runs judging, adaptive selection, ranking, countdown, and bank test
 - Monaco editor and a pinned Pyodide v0.25.0 Web Worker
 - Ordered curriculum topic selection with automatic prerequisite inclusion
 - Randomized adaptive progression within each tier, with safe onboarding, stretch challenges, and per-problem difficulty bonuses
-- Five-minute solo sprints with simulated peers, persistent countdown, and frozen results
-- Google-authenticated multiplayer with cross-device resume, timed or unlimited rooms, live standings, results, and rematches
+- Open-ended solo practice with simulated peers, reset, quit, and local progress
+- Timed multiplayer rooms without Google sign-in, plus Google-authenticated unlimited rooms, live standings, results, and rematches
 
 The v1, v2, and v3 banks remain immutable for active rooms. The current v4 bank adds 58 distinct challenges and the timed-event metadata without changing older rooms.
 

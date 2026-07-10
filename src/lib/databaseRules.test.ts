@@ -12,9 +12,13 @@ describe("Realtime Database rule shape", () => {
     expect(rules[".write"]).toBe(false);
   });
 
-  it("requires authentication to read a room", () => {
+  it("requires authentication to read a room and gates unlimited rooms behind Google", () => {
     const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
-    expect(String(room[".read"])).toContain("google.com");
+    const readRule = String(room[".read"]);
+    expect(readRule).toContain("auth != null");
+    expect(readRule).toContain("meta/unlimited");
+    expect(readRule).toContain("!== true");
+    expect(readRule).toContain("google.com");
   });
 
   it("limits leaderboard and progress writes to their owner or host", () => {
@@ -38,10 +42,16 @@ describe("Realtime Database rule shape", () => {
     expect(metaValidation).toContain("isBoolean");
   });
 
-  it("requires Google sign-in for room writes", () => {
+  it("allows timed room writes with auth and keeps unlimited writes Google-gated", () => {
     const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
-    expect(String(room[".write"])).toContain("sign_in_provider");
-    expect(String(((room.progress as RuleNode).$uid as RuleNode)[".write"])).toContain("google.com");
+    const roomWrite = String(room[".write"]);
+    const progressWrite = String(((room.progress as RuleNode).$uid as RuleNode)[".write"]);
+    expect(roomWrite).toContain("auth != null");
+    expect(roomWrite).toContain("newData.child('meta/unlimited').val() !== true");
+    expect(roomWrite).toContain("google.com");
+    expect(progressWrite).toContain("auth != null");
+    expect(progressWrite).toContain("meta/unlimited");
+    expect(progressWrite).toContain("google.com");
   });
 
   it("validates the free adaptive learning profile", () => {

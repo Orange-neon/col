@@ -1,4 +1,4 @@
-import { Code2, RotateCcw, Trophy } from "lucide-react";
+import { Code2, LogOut, RotateCcw, Trophy } from "lucide-react";
 import { DIFFICULTIES, DIFFICULTY_CONFIG } from "../data/difficulty";
 import type { Difficulty } from "../data/problemTypes";
 import { BrandLogo } from "./BrandLogo";
@@ -12,6 +12,7 @@ interface NavbarProps {
   timeRemaining?: string;
   onSelectDifficulty: (difficulty: Difficulty) => void;
   onReset?: () => void;
+  onExit?: () => void;
 }
 
 const difficultyStyles: Record<Difficulty, string> = {
@@ -29,6 +30,7 @@ export function Navbar({
   timeRemaining,
   onSelectDifficulty,
   onReset,
+  onExit,
 }: NavbarProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#070b16]/90 backdrop-blur-xl">
@@ -61,7 +63,12 @@ export function Navbar({
                 }`}
               >
                 {config.label} (+{config.points} base)
-                <span className="ml-2 text-[11px] opacity-60">{remaining[difficulty]} left</span>
+                <span
+                  className="ml-2 rounded-full border border-white/10 px-1.5 py-0.5 text-[11px] opacity-70"
+                  aria-label={`${remaining[difficulty]} problems remaining`}
+                >
+                  {remaining[difficulty]}
+                </span>
               </button>
             );
           })}
@@ -97,12 +104,23 @@ export function Navbar({
           {onReset && (
             <button
               type="button"
-              title="Reset sprint"
-              aria-label="Reset sprint"
+              title="Reset practice"
+              aria-label="Reset practice"
               onClick={onReset}
               className="grid size-10 place-items-center rounded-xl border border-slate-700/70 bg-slate-900/80 text-slate-400 transition hover:border-slate-600 hover:text-white"
             >
               <RotateCcw size={17} />
+            </button>
+          )}
+          {onExit && (
+            <button
+              type="button"
+              title="Quit practice"
+              aria-label="Quit practice"
+              onClick={onExit}
+              className="grid size-10 place-items-center rounded-xl border border-slate-700/70 bg-slate-900/80 text-slate-400 transition hover:border-slate-600 hover:text-white"
+            >
+              <LogOut size={17} />
             </button>
           )}
         </div>

@@ -2,7 +2,7 @@ import { ArrowRight, Gamepad2, LoaderCircle, LogIn, LogOut, Radio, UserRound, Us
 import { useEffect, useState } from "react";
 import { getDefaultTopicSelection, type CurriculumTopicId } from "../data/curriculum";
 import type { ProblemBank } from "../data/problemTypes";
-import type { GoogleUserProfile } from "../lib/firebase";
+import { getFirebaseErrorMessage, type GoogleUserProfile } from "../lib/firebase";
 import { BrandLogo } from "./BrandLogo";
 import { TopicSelector } from "./TopicSelector";
 
@@ -43,7 +43,7 @@ export function HomeScreen({
     try {
       await action();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(getFirebaseErrorMessage(reason));
       setBusy(null);
     }
   };
@@ -58,7 +58,7 @@ export function HomeScreen({
     try {
       await action();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(getFirebaseErrorMessage(reason));
     } finally {
       setBusy(null);
     }
@@ -92,10 +92,10 @@ export function HomeScreen({
               )}
               <div className="min-w-0">
                 <p className="font-bold text-white">
-                  {authLoading ? "Checking sign-in…" : authUser ? authUser.displayName : "Google sign-in required"}
+                  {authLoading ? "Checking sign-in…" : authUser ? authUser.displayName : "Google sign-in optional"}
                 </p>
                 <p className="truncate text-xs text-slate-500">
-                  {authUser ? authUser.email : "Sign in to create, join, and resume multiplayer rooms."}
+                  {authUser ? authUser.email : "Required only for unlimited rooms and cross-device resume."}
                 </p>
               </div>
             </div>
@@ -139,7 +139,7 @@ export function HomeScreen({
               />
               <button
                 type="button"
-                disabled={!configured || !authUser || busy !== null}
+                disabled={!configured || busy !== null}
                 onClick={() => perform("join", () => onJoinRoom(code, nickname))}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-sm font-black text-slate-950 hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -161,7 +161,7 @@ export function HomeScreen({
             </div>
             <button
               type="button"
-              disabled={!configured || !authUser || busy !== null}
+              disabled={!configured || busy !== null}
               onClick={() => perform("create", () => onCreateRoom(topics))}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-200 hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
             >

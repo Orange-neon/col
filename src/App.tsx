@@ -3,12 +3,11 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bomb,
-  Clock3,
+  History,
   LoaderCircle,
   RefreshCw,
-  RotateCcw,
   Sparkles,
-  Trophy,
+  Terminal,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,6 +19,7 @@ import { HomeScreen } from "./components/HomeScreen";
 import { HostDashboard } from "./components/HostDashboard";
 import { LeaderboardTicker } from "./components/LeaderboardTicker";
 import { Navbar } from "./components/Navbar";
+import { ProblemHistory } from "./components/ProblemHistory";
 import { RaceResults } from "./components/RaceResults";
 import { RoomLobby } from "./components/RoomLobby";
 import { SolutionModal } from "./components/SolutionModal";
@@ -39,26 +39,16 @@ import { useMultiplayerRace } from "./hooks/useMultiplayerRace";
 import { usePyodide } from "./hooks/usePyodide";
 import { useRaceRoom } from "./hooks/useRaceRoom";
 import { compareOutput } from "./lib/judge";
-import { formatCountdown } from "./lib/raceLogic";
 import {
-  createSoloDeadline,
-  getSoloSecondsRemaining,
-  SOLO_DURATION_SECONDS,
-} from "./lib/soloTimer";
+  readProblemHistory,
+  rememberProblem,
+  saveProblemHistory,
+} from "./lib/problemHistory";
+import { formatCountdown } from "./lib/raceLogic";
 import type { RoomMeta, RoomSession } from "./types/multiplayer";
 import type { RaceController } from "./types/race";
 
 type PythonController = ReturnType<typeof usePyodide>;
-
-const SOLO_DEADLINE_KEY = "col.solo-deadline.v1";
-
-function readSoloDeadline(): { endsAt: number; fresh: boolean } {
-  const stored = Number(localStorage.getItem(SOLO_DEADLINE_KEY));
-  if (Number.isFinite(stored) && stored > 0) return { endsAt: stored, fresh: false };
-  const endsAt = createSoloDeadline();
-  localStorage.setItem(SOLO_DEADLINE_KEY, String(endsAt));
-  return { endsAt, fresh: true };
-}
 
 function useCountdown(
   meta: RoomMeta,
@@ -146,8 +136,20 @@ function GameShell({
   const [busy, setBusy] = useState(false);
   const [solutionProblem, setSolutionProblem] = useState<Problem | null>(null);
   const [timedSeconds, setTimedSeconds] = useState<number | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"run" | "history">("run");
+  const [problemHistoryIds, setProblemHistoryIds] = useState(readProblemHistory);
   const handledExpiry = useRef<string | null>(null);
   const { confirm, notify } = useFeedback();
+  const activeProblemId = race.activeProblem?.id ?? null;
+
+  useEffect(() => {
+    if (!activeProblemId) return;
+    setProblemHistoryIds((current) => {
+      const next = rememberProblem(current, activeProblemId);
+      saveProblemHistory(next);
+      return next;
+    });
+  }, [activeProblemId]);
 
   useEffect(() => {
     const problem = race.activeProblem;
@@ -354,6 +356,7 @@ function GameShell({
         timeRemaining={timeRemaining}
         onSelectDifficulty={selectDifficulty}
         onReset={onReset}
+        onExit={onExit}
       />
 
       {race.activeProblem?.timedMode && timedSeconds !== null && (
@@ -387,18 +390,51 @@ function GameShell({
               </div>
             </div>
           )}
-          <Console
-            stdin={race.stdin}
-            output={output}
-            pyodideStatus={python.status}
-            busy={busy}
-            hasProblem={Boolean(race.activeProblem)}
-            onStdinChange={race.setStdin}
-            onRun={runCode}
-            onSubmit={submitSolution}
-            onGiveUp={giveUp}
-            onCancel={stopExecution}
-          />
+          <div className="flex gap-2 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+            <button
+              type="button"
+              onClick={() => setSidebarTab("run")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                sidebarTab === "run"
+                  ? "bg-sky-400 text-slate-950"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Terminal size={15} /> Run
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarTab("history")}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                sidebarTab === "history"
+                  ? "bg-sky-400 text-slate-950"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <History size={15} /> History
+            </button>
+          </div>
+          {sidebarTab === "run" ? (
+            <Console
+              stdin={race.stdin}
+              output={output}
+              pyodideStatus={python.status}
+              busy={busy}
+              hasProblem={Boolean(race.activeProblem)}
+              onStdinChange={race.setStdin}
+              onRun={runCode}
+              onSubmit={submitSolution}
+              onGiveUp={giveUp}
+              onCancel={stopExecution}
+            />
+          ) : (
+            <ProblemHistory
+              problems={bank.problems}
+              historyIds={problemHistoryIds}
+              activeProblemId={activeProblemId}
+              solvedIds={race.solvedIds}
+            />
+          )}
           <LeaderboardTicker racers={race.racers} events={race.events} simulated={simulated} />
           {race.requestChallenge && (
             <ChallengePanel
@@ -424,7 +460,7 @@ function GameShell({
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><Sparkles size={11} /> Code stays in this browser</span>
           {onExit && (
-            <button type="button" onClick={onExit} className="flex items-center gap-1 text-slate-500 hover:text-white"><ArrowLeft size={12} /> Exit</button>
+            <button type="button" onClick={onExit} className="flex items-center gap-1 text-slate-500 hover:text-white"><ArrowLeft size={12} /> Quit</button>
           )}
         </div>
       </footer>
@@ -470,74 +506,29 @@ function GameShell({
 }
 
 function LocalGame({ bank, onExit }: { bank: ProblemBank; onExit: () => void }) {
-  const [timer, setTimer] = useState(readSoloDeadline);
-  const [seconds, setSeconds] = useState(() =>
-    getSoloSecondsRemaining(timer.endsAt),
-  );
   const python = usePyodide();
-  const race = useLocalRace(bank, seconds > 0);
+  const race = useLocalRace(bank);
   const { confirm, notify } = useFeedback();
-
-  useEffect(() => {
-    if (timer.fresh) race.reset();
-  }, [race.reset, timer.fresh]);
-
-  useEffect(() => {
-    const update = () => setSeconds(getSoloSecondsRemaining(timer.endsAt));
-    update();
-    const intervalId = window.setInterval(update, 500);
-    return () => window.clearInterval(intervalId);
-  }, [timer.endsAt]);
-
-  const beginNewSprint = () => {
-    const endsAt = createSoloDeadline();
-    localStorage.setItem(SOLO_DEADLINE_KEY, String(endsAt));
-    race.reset();
-    setTimer({ endsAt, fresh: false });
-    setSeconds(SOLO_DURATION_SECONDS);
-  };
 
   const resetRace = async () => {
     const confirmed = await confirm({
-      title: "Reset your solo race?",
+      title: "Reset solo practice?",
       message: "Your score, solved challenges, code drafts, and simulated race progress will be cleared.",
       confirmLabel: "Reset race",
       tone: "danger",
     });
     if (confirmed) {
-      beginNewSprint();
-      notify({ tone: "success", title: "Solo race reset", message: "A fresh five-minute sprint is ready." });
+      race.reset();
+      notify({ tone: "success", title: "Solo practice reset", message: "A fresh practice run is ready." });
     }
   };
 
-  if (seconds === 0) {
-    return (
-      <main className="grid-glow min-h-screen bg-[#070b16] px-4 py-12 text-slate-100">
-        <div className="mx-auto w-full max-w-2xl text-center">
-          <BrandLogo className="mx-auto size-16 rounded-2xl object-contain shadow-xl shadow-sky-500/20" />
-          <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-sky-300">Solo sprint complete</p>
-          <h1 className="mt-2 text-4xl font-black text-white">Time's up!</h1>
-          <p className="mt-3 text-sm text-slate-400">Your five-minute practice result is frozen below.</p>
-          <div className="panel mt-8 grid grid-cols-3 gap-3 p-5">
-            <div><Trophy className="mx-auto text-amber-300" size={22} /><strong className="mt-2 block text-2xl text-white">{race.score}</strong><span className="text-xs text-slate-500">points</span></div>
-            <div><Sparkles className="mx-auto text-sky-300" size={22} /><strong className="mt-2 block text-2xl text-white">{race.solvedIds.length}</strong><span className="text-xs text-slate-500">solved</span></div>
-            <div><Clock3 className="mx-auto text-violet-300" size={22} /><strong className="mt-2 block text-2xl text-white">5:00</strong><span className="text-xs text-slate-500">duration</span></div>
-          </div>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={beginNewSprint} className="flex items-center gap-2 rounded-xl bg-sky-400 px-5 py-3 text-sm font-black text-slate-950"><RotateCcw size={16} /> New sprint</button>
-            <button type="button" onClick={onExit} className="flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-3 text-sm font-bold text-slate-300"><ArrowLeft size={16} /> Exit</button>
-          </div>
-        </div>
-      </main>
-    );
-  }
   return (
     <GameShell
       bank={bank}
       race={race}
       python={python}
       simulated
-      timeRemaining={formatCountdown(seconds)}
       onReset={resetRace}
       onExit={onExit}
     />
@@ -578,8 +569,24 @@ function HostRoom({ room, session }: RoomPageProps) {
         durationSeconds={meta.durationSeconds}
         unlimited={Boolean(meta.unlimited)}
         onDurationChange={room.setDuration}
-        onUnlimitedChange={room.setUnlimited}
-        onStart={room.startRace}
+        onUnlimitedChange={(unlimited) => {
+          void room.setUnlimited(unlimited).catch((reason) => {
+            notify({
+              tone: "error",
+              title: "Room length was not changed",
+              message: reason instanceof Error ? reason.message : String(reason),
+            });
+          });
+        }}
+        onStart={() => {
+          void room.startRace().catch((reason) => {
+            notify({
+              tone: "error",
+              title: "Race could not start",
+              message: reason instanceof Error ? reason.message : String(reason),
+            });
+          });
+        }}
         onLeave={() => void closeRoom()}
       />
     );
