@@ -16,6 +16,7 @@ import {
   subscribeActiveRoomSession,
   writeActiveRoomSession,
 } from "../lib/roomSession";
+import { readFirebaseServerTimeOffset } from "../lib/firebaseServerTime";
 import {
   COLLABORATION_SCHEMA_VERSION,
   MAX_COLLABORATION_MEMBERS,
@@ -236,13 +237,13 @@ export function useCollaborationRoom() {
         };
 
         const restoreMembership = async () => {
-          const [metaSnapshot, memberSnapshot, offsetSnapshot] = await Promise.all([
+          const [metaSnapshot, memberSnapshot, serverOffset] = await Promise.all([
             db.get(metaRef),
             db.get(memberRef),
-            db.get(offsetRef),
+            readFirebaseServerTimeOffset(database, db),
           ]);
           if (cancelled || !metaSnapshot.exists()) return;
-          serverOffsetRef.current = Number(offsetSnapshot.val()) || 0;
+          serverOffsetRef.current = serverOffset;
           const currentMeta = metaSnapshot.val() as CollaborationRoomMeta;
           const serverNow = Date.now() + serverOffsetRef.current;
           if (
@@ -351,8 +352,7 @@ export function useCollaborationRoom() {
         throw new Error("Sign in with Google to create a collaboration room.");
       }
       const nickname = creatorNickname(rawNickname, user);
-      const offsetSnapshot = await db.get(db.ref(database, ".info/serverTimeOffset"));
-      const serverOffset = Number(offsetSnapshot.val()) || 0;
+      const serverOffset = await readFirebaseServerTimeOffset(database, db);
 
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const code = generateRoomCode();
@@ -408,15 +408,14 @@ export function useCollaborationRoom() {
       const { database, user, db } = await getFirebaseContext();
       const metaRef = db.ref(database, `collaborationRooms/${code}/meta`);
       const memberRef = db.ref(database, `collaborationRooms/${code}/members/${user.uid}`);
-      const offsetRef = db.ref(database, ".info/serverTimeOffset");
-      const [metaSnapshot, memberSnapshot, offsetSnapshot] = await Promise.all([
+      const [metaSnapshot, memberSnapshot, serverOffset] = await Promise.all([
         db.get(metaRef),
         db.get(memberRef),
-        db.get(offsetRef),
+        readFirebaseServerTimeOffset(database, db),
       ]);
       if (!metaSnapshot.exists()) throw new Error("Collaboration room not found or expired.");
       const nextMeta = metaSnapshot.val() as CollaborationRoomMeta;
-      const serverNow = Date.now() + (Number(offsetSnapshot.val()) || 0);
+      const serverNow = Date.now() + serverOffset;
       if (
         nextMeta.status !== "open" ||
         nextMeta.schemaVersion !== COLLABORATION_SCHEMA_VERSION ||

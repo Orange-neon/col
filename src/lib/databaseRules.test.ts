@@ -89,7 +89,7 @@ describe("Realtime Database rule shape", () => {
     const roomWrite = String(room[".write"]);
     expect(roomWrite).toContain("google.com");
     expect(roomWrite).toContain("meta/creatorUid");
-    expect(roomWrite).toContain("newData.child('members').child(auth.uid)");
+    expect(roomWrite).not.toContain("newData.child('members').child(auth.uid)");
     expect(roomWrite).toContain("newData.child('memberSlots').child('0')");
     expect(roomWrite).toContain("meta/leaseExpiresAt");
     expect(roomWrite).toContain("<= now");
@@ -157,7 +157,12 @@ describe("Realtime Database rule shape", () => {
     expect(writeRule).toContain("child('members').child(auth.uid)");
     expect(writeRule).toContain("child('slot').val() === $slot");
     expect(validation).toContain("newData.isString()");
-    expect(validation).toContain("child('members').child(auth.uid)");
+    expect(validation).toContain("newData.val() === auth.uid");
+    const memberValidation = String(
+      (((room.members as RuleNode).$uid ?? {}) as RuleNode)[".validate"],
+    );
+    expect(memberValidation).toContain("child('memberSlots').child('0')");
+    expect(memberValidation).toContain("child('memberSlots').child('29')");
   });
 
   it("requires existing members and slots to be removed atomically", () => {
@@ -172,10 +177,10 @@ describe("Realtime Database rule shape", () => {
 
     // Once either half exists, both halves must disappear in the same write.
     expect(memberWrite).toContain(
-      "data.parent().parent().child('memberSlots').child(data.child('slot').val()).val() === auth.uid",
+      "data.parent().parent().child('memberSlots').child(data.child('slot').val() + '').val() === auth.uid",
     );
     expect(memberWrite).toContain(
-      "!newData.parent().parent().child('memberSlots').child(data.child('slot').val()).exists()",
+      "!newData.parent().parent().child('memberSlots').child(data.child('slot').val() + '').exists()",
     );
     expect(slotWrite).toContain(
       "data.parent().parent().child('members').child(auth.uid).child('slot').val() === $slot",
