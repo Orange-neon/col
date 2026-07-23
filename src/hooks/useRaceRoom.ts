@@ -35,9 +35,11 @@ import {
 } from "../lib/roomSession";
 import type {
   PlayerProgress,
+  RaceActivity,
   RoomChallenge,
   RoomMeta,
   RoomPlayer,
+  RoomSpectator,
   RoomSession,
 } from "../types/multiplayer";
 import type { RaceEvent } from "../types/race";
@@ -84,6 +86,9 @@ export function useRaceRoom(bank: ProblemBank) {
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
   const [meta, setMeta] = useState<RoomMeta | null>(null);
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
+  const [spectators, setSpectators] = useState<RoomSpectator[]>([]);
+  const [activities, setActivities] = useState<Record<string, RaceActivity>>({});
+  const [activityError, setActivityError] = useState<string | null>(null);
   const [progress, setProgress] = useState<PlayerProgress>(EMPTY_PROGRESS);
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [events, setEvents] = useState<RaceEvent[]>([]);
@@ -168,7 +173,7 @@ export function useRaceRoom(bank: ProblemBank) {
     getFirebaseContext()
       .then(({ database, user, db }) => {
         if (cancelled) return;
-        const { limitToLast, off, onDisconnect, onValue, orderByChild, query, ref, set } = db;
+        const { limitToLast, off, onValue, orderByChild, query, ref } = db;
         if (user.uid !== session.uid) {
           saveSession(null);
           throw new Error("This room session belongs to a different browser identity.");
@@ -177,6 +182,7 @@ export function useRaceRoom(bank: ProblemBank) {
         const roomRef = ref(database, `rooms/${session.code}`);
         const metaRef = ref(database, `rooms/${session.code}/meta`);
         const leaderboardRef = ref(database, `rooms/${session.code}/leaderboard`);
+        const spectatorsRef = ref(database, `rooms/${session.code}/spectators`);
         const progressRef = ref(database, `rooms/${session.code}/progress/${session.uid}`);
         const challengeRef = ref(database, `rooms/${session.code}/challenge`);
         const eventsRef = query(
@@ -186,26 +192,124 @@ export function useRaceRoom(bank: ProblemBank) {
         );
         const offsetRef = ref(database, ".info/serverTimeOffset");
         const connectedRef = ref(database, ".info/connected");
+        let initialMeta: RoomMeta | null | undefined;
+        let initialLeaderboard: Record<string, RoomPlayer> | undefined;
+        let initialSpectators: Record<string, RoomSpectator> | undefined;
+        let initialProgressReady = false;
+        let initialResolved = false;
+        const resolveInitialSession = () => {
+          if (
+            initialResolved ||
+            initialMeta === undefined ||
+            initialLeaderboard === undefined ||
+            initialSpectators === undefined
+          ) {
+            return;
+          }
+          initialResolved = true;
+          if (!initialMeta) {
+            saveSession(null);
+            return;
+          }
+          if (session.role === "host") {
+            if (initialMeta.hostUid !== session.uid) {
+              saveSession(null);
+              return;
+            }
+            setLoading(false);
+            return;
+          }
+          const spectator = initialSpectators[session.uid];
+          if (spectator) {
+            if (session.role !== "spectator") {
+              saveSession({
+                code: session.code,
+                uid: session.uid,
+                role: "spectator",
+                nickname: spectator.nickname,
+              });
+            } else {
+              setLoading(false);
+            }
+            return;
+          }
+          const player = initialLeaderboard[session.uid];
+          if (player) {
+            if (!initialProgressReady) {
+              initialResolved = false;
+              return;
+            }
+            if (session.role !== "player") {
+              saveSession({
+                code: session.code,
+                uid: session.uid,
+                role: "player",
+                nickname: player.nickname,
+              });
+            } else {
+              setLoading(false);
+            }
+            return;
+          }
+          saveSession(null);
+        };
 
         cleanups = [
           onValue(metaRef, (snapshot) => {
             if (!snapshot.exists()) {
+              initialMeta = null;
               saveSession(null);
               setError("This room has been closed.");
               return;
             }
-            setMeta(snapshot.val() as RoomMeta);
-            setLoading(false);
+            const value = snapshot.val() as RoomMeta;
+            initialMeta = value;
+            setMeta(value);
+            resolveInitialSession();
           }),
           onValue(leaderboardRef, (snapshot) => {
             const value = (snapshot.val() ?? {}) as Record<string, RoomPlayer>;
+            initialLeaderboard = value;
             setPlayers(Object.values(value));
+            resolveInitialSession();
+          }),
+          onValue(spectatorsRef, (snapshot) => {
+            const value = (snapshot.val() ?? {}) as Record<string, RoomSpectator>;
+            initialSpectators = value;
+            const nextSpectators = Object.values(value);
+            setSpectators(nextSpectators);
+            const self = value[session.uid];
+            if (initialResolved) {
+              if (session.role === "player" && self) {
+                saveSession({
+                  code: session.code,
+                  uid: session.uid,
+                  role: "spectator",
+                  nickname: self.nickname,
+                });
+              } else if (session.role === "spectator" && !self) {
+                const player = initialLeaderboard?.[session.uid];
+                saveSession(
+                  player
+                    ? {
+                        code: session.code,
+                        uid: session.uid,
+                        role: "player",
+                        nickname: player.nickname,
+                      }
+                    : null,
+                );
+              }
+            }
+            resolveInitialSession();
           }),
           onValue(progressRef, (snapshot) => {
+            initialProgressReady = true;
             if (session.role === "player") {
               setProgress(normalizeProgress(snapshot.val() as PlayerProgress | null));
               setProgressLoaded(true);
             }
+            resolveInitialSession();
           }),
           onValue(challengeRef, (snapshot) => {
             setChallenge(snapshot.exists() ? (snapshot.val() as RoomChallenge) : null);
@@ -226,14 +330,6 @@ export function useRaceRoom(bank: ProblemBank) {
           }),
         ];
 
-        const presenceRef =
-          session.role === "host"
-            ? ref(database, `rooms/${session.code}/meta/hostOnline`)
-            : ref(database, `rooms/${session.code}/leaderboard/${session.uid}/online`);
-        set(presenceRef, true);
-        const disconnect = onDisconnect(presenceRef);
-        disconnect.set(false);
-        cleanups.push(() => disconnect.cancel());
         cleanups.push(() => off(roomRef));
       })
       .catch((reason) => {
@@ -247,6 +343,110 @@ export function useRaceRoom(bank: ProblemBank) {
       cleanups.forEach((cleanup) => cleanup());
     };
   }, [saveSession, session]);
+
+  useEffect(() => {
+    if (!connected || !session || !meta) return;
+    let cancelled = false;
+    let disconnect:
+      | {
+          cancel: () => Promise<void>;
+          set: (value: unknown) => Promise<void>;
+        }
+      | undefined;
+    getFirebaseContext()
+      .then(async ({ database, db }) => {
+        if (cancelled) return;
+        const presenceRef =
+          session.role === "host"
+            ? db.ref(database, `rooms/${session.code}/meta/hostOnline`)
+            : session.role === "spectator"
+              ? db.ref(database, `rooms/${session.code}/spectators/${session.uid}/online`)
+              : db.ref(database, `rooms/${session.code}/leaderboard/${session.uid}/online`);
+        await db.set(presenceRef, true);
+        if (cancelled) return;
+        disconnect = db.onDisconnect(presenceRef);
+        await disconnect.set(false);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      void disconnect?.cancel().catch(() => undefined);
+    };
+  }, [connected, meta?.createdAt, session]);
+
+  useEffect(() => {
+    if (
+      !session ||
+      !meta ||
+      meta.status !== "active" ||
+      (session.role !== "host" && session.role !== "spectator")
+    ) {
+      setActivities({});
+      setActivityError(null);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    getFirebaseContext()
+      .then(({ database, db }) => {
+        if (cancelled) return;
+        setActivityError(null);
+        const activityRef = db.ref(
+          database,
+          `raceActivity/${session.code}/${meta.createdAt}`,
+        );
+        unsubscribe = db.onValue(
+          activityRef,
+          (snapshot) => {
+            setActivities((snapshot.val() ?? {}) as Record<string, RaceActivity>);
+            setActivityError(null);
+          },
+          () => {
+            setActivities({});
+            setActivityError(
+              "Live code monitoring is unavailable. Publish the included Firebase database rules, then reconnect.",
+            );
+          },
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActivities({});
+          setActivityError("Live code monitoring could not connect.");
+        }
+      });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [meta?.createdAt, meta?.status, session]);
+
+  useEffect(() => {
+    if (!connected || !session || session.role !== "player" || !meta) return;
+    let cancelled = false;
+    let disconnect:
+      | {
+          cancel: () => Promise<void>;
+          remove: () => Promise<void>;
+        }
+      | undefined;
+    getFirebaseContext()
+      .then(({ database, db }) => {
+        if (cancelled) return;
+        const activityRef = db.ref(
+          database,
+          `raceActivity/${session.code}/${meta.createdAt}/${session.uid}`,
+        );
+        disconnect = db.onDisconnect(activityRef);
+        void disconnect.remove().catch(() => undefined);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      void disconnect?.cancel().catch(() => undefined);
+    };
+  }, [connected, meta?.createdAt, session]);
 
   useEffect(() => {
     if (!session || session.role !== "player" || !progressLoaded || !meta) return;
@@ -353,6 +553,7 @@ export function useRaceRoom(bank: ProblemBank) {
       const room = snapshot.val() as {
         meta: RoomMeta;
         leaderboard?: Record<string, RoomPlayer>;
+        spectators?: Record<string, RoomSpectator>;
       };
       if (room.meta.unlimited && !hasGoogleProvider(user)) {
         throw new Error("Sign in with Google to join unlimited rooms.");
@@ -368,8 +569,21 @@ export function useRaceRoom(bank: ProblemBank) {
         throw new Error("This room's topic selection is not compatible with this build.");
       }
       const existingPlayers = Object.values(room.leaderboard ?? {});
+      const existingSpectators = Object.values(room.spectators ?? {});
       if (room.meta.hostUid === user.uid) {
         const next = { code, uid: user.uid, role: "host" as const };
+        saveSession(next);
+        return next;
+      }
+      const returningSpectator = room.spectators?.[user.uid];
+      if (returningSpectator) {
+        await update(roomRef, { [`spectators/${user.uid}/online`]: true });
+        const next = {
+          code,
+          uid: user.uid,
+          role: "spectator" as const,
+          nickname: returningSpectator.nickname,
+        };
         saveSession(next);
         return next;
       }
@@ -391,11 +605,15 @@ export function useRaceRoom(bank: ProblemBank) {
       if (nickname.length < 2 || nickname.length > 20) {
         throw new Error("Nickname must be between 2 and 20 characters.");
       }
-      if (existingPlayers.length >= 30) throw new Error("That room is full.");
+      if (existingPlayers.length + existingSpectators.length >= 30) {
+        throw new Error("That room is full.");
+      }
       const normalizedNickname = normalizeNickname(nickname);
       if (
-        existingPlayers.some(
-          (player) => player.uid !== user.uid && player.normalizedNickname === normalizedNickname,
+        [...existingPlayers, ...existingSpectators].some(
+          (participant) =>
+            participant.uid !== user.uid &&
+            participant.normalizedNickname === normalizedNickname,
         )
       ) {
         throw new Error("That nickname is already in the room.");
@@ -438,6 +656,89 @@ export function useRaceRoom(bank: ProblemBank) {
       await set(ref(database, `rooms/${session.code}/leaderboard/${session.uid}/ready`), ready);
     },
     [session],
+  );
+
+  const publishActivity = useCallback(
+    async (activity: Omit<RaceActivity, "updatedAt"> | null) => {
+      if (!session || session.role !== "player" || !meta) return;
+      const { database, db } = await getFirebaseContext();
+      const activityRef = db.ref(
+        database,
+        `raceActivity/${session.code}/${meta.createdAt}/${session.uid}`,
+      );
+      if (!activity) {
+        await db.remove(activityRef);
+        return;
+      }
+      if (meta.status !== "active") return;
+      await db.set(activityRef, {
+        ...activity,
+        source: activity.source.slice(0, 50_000),
+        updatedAt: Date.now() + serverOffsetRef.current,
+      } satisfies RaceActivity);
+    },
+    [meta?.createdAt, meta?.status, session],
+  );
+
+  const makeSpectator = useCallback(
+    async (uid: string) => {
+      if (!session || session.role !== "host" || !meta) return;
+      const player = players.find((item) => item.uid === uid);
+      if (!player) throw new Error("That contestant is no longer in the race.");
+      const now = Date.now() + serverOffsetRef.current;
+      const spectator: RoomSpectator = {
+        uid: player.uid,
+        nickname: player.nickname,
+        normalizedNickname: player.normalizedNickname,
+        joinedAt: player.joinedAt,
+        assignedAt: now,
+        online: player.online,
+      };
+      const roomPath = `rooms/${session.code}`;
+      const updates: Record<string, unknown> = {
+        [`${roomPath}/spectators/${uid}`]: spectator,
+        [`${roomPath}/leaderboard/${uid}`]: null,
+        [`${roomPath}/progress/${uid}`]: null,
+        [`raceActivity/${session.code}/${meta.createdAt}/${uid}`]: null,
+      };
+      if (
+        challenge &&
+        (challenge.challengerUid === uid || challenge.championUid === uid)
+      ) {
+        updates[`${roomPath}/challenge/status`] = "finished";
+        updates[`${roomPath}/challenge/finishedAt`] = now;
+        updates[`${roomPath}/challenge/winnerUid`] = null;
+      }
+      if (meta.status === "active" && players.length === 1) {
+        updates[`${roomPath}/meta/status`] = "finished";
+        updates[`${roomPath}/meta/endedAt`] = now;
+        updates[`${roomPath}/meta/endReason`] = "host";
+      }
+      const { database, db } = await getFirebaseContext();
+      await db.update(db.ref(database), updates);
+      await db.runTransaction(
+        db.ref(database, `${roomPath}/challenge`),
+        (current: RoomChallenge | null) => {
+          if (
+            !current ||
+            current.status === "finished" ||
+            (current.challengerUid !== uid && current.championUid !== uid)
+          ) {
+            return undefined;
+          }
+          return {
+            ...current,
+            status: "finished",
+            finishedAt: now,
+            winnerUid: null,
+          };
+        },
+      );
+      await addEvent(`${player.nickname} is now a spectator`, "neutral").catch(
+        () => undefined,
+      );
+    },
+    [addEvent, challenge, meta, players, session],
   );
 
   const setDuration = useCallback(
@@ -490,14 +791,38 @@ export function useRaceRoom(bank: ProblemBank) {
 
   const finishRace = useCallback(
     async (reason: "time" | "host" | "completed") => {
-      if (!session || !meta || meta.status !== "active") return;
+      if (
+        !session ||
+        session.role === "spectator" ||
+        !meta ||
+        meta.status !== "active"
+      ) {
+        return;
+      }
       const { database, db } = await getFirebaseContext();
-      const { ref, update } = db;
-      await update(ref(database, `rooms/${session.code}/meta`), {
-        status: "finished",
-        endedAt: Date.now() + serverOffsetRef.current,
-        endReason: reason,
-      });
+      const now = Date.now() + serverOffsetRef.current;
+      if (session.role === "host") {
+        await db.update(db.ref(database), {
+          [`rooms/${session.code}/meta/status`]: "finished",
+          [`rooms/${session.code}/meta/endedAt`]: now,
+          [`rooms/${session.code}/meta/endReason`]: reason,
+          [`raceActivity/${session.code}/${meta.createdAt}`]: null,
+        });
+      } else {
+        await db
+          .remove(
+            db.ref(
+              database,
+              `raceActivity/${session.code}/${meta.createdAt}/${session.uid}`,
+            ),
+          )
+          .catch(() => undefined);
+        await db.update(db.ref(database, `rooms/${session.code}/meta`), {
+          status: "finished",
+          endedAt: now,
+          endReason: reason,
+        });
+      }
     },
     [meta, session],
   );
@@ -708,7 +1033,12 @@ export function useRaceRoom(bank: ProblemBank) {
 
   const recordChallengeSolve = useCallback(
     async (problem: Problem): Promise<number> => {
-      if (!session || !challenge || challenge.status !== "active") {
+      if (
+        !session ||
+        session.role !== "player" ||
+        !challenge ||
+        challenge.status !== "active"
+      ) {
         throw new Error("This challenge is no longer active.");
       }
       const { database, db } = await getFirebaseContext();
@@ -780,22 +1110,23 @@ export function useRaceRoom(bank: ProblemBank) {
     const { database, db } = await getFirebaseContext();
     const { ref, update } = db;
     const updates: Record<string, unknown> = {
-      "meta/status": "lobby",
-      "meta/startedAt": null,
-      "meta/endsAt": null,
-      "meta/endedAt": null,
-      "meta/endReason": null,
-      challenge: null,
-      events: null,
+      [`rooms/${session.code}/meta/status`]: "lobby",
+      [`rooms/${session.code}/meta/startedAt`]: null,
+      [`rooms/${session.code}/meta/endsAt`]: null,
+      [`rooms/${session.code}/meta/endedAt`]: null,
+      [`rooms/${session.code}/meta/endReason`]: null,
+      [`rooms/${session.code}/challenge`]: null,
+      [`rooms/${session.code}/events`]: null,
+      [`raceActivity/${session.code}/${meta.createdAt}`]: null,
     };
     for (const player of players) {
-      updates[`leaderboard/${player.uid}/score`] = 0;
-      updates[`leaderboard/${player.uid}/correctCount`] = 0;
-      updates[`leaderboard/${player.uid}/lastAcceptedAt`] = null;
-      updates[`leaderboard/${player.uid}/ready`] = false;
-      updates[`progress/${player.uid}`] = EMPTY_PROGRESS;
+      updates[`rooms/${session.code}/leaderboard/${player.uid}/score`] = 0;
+      updates[`rooms/${session.code}/leaderboard/${player.uid}/correctCount`] = 0;
+      updates[`rooms/${session.code}/leaderboard/${player.uid}/lastAcceptedAt`] = null;
+      updates[`rooms/${session.code}/leaderboard/${player.uid}/ready`] = false;
+      updates[`rooms/${session.code}/progress/${player.uid}`] = EMPTY_PROGRESS;
     }
-    await update(ref(database, `rooms/${session.code}`), updates);
+    await update(ref(database), updates);
   }, [meta, players, session]);
 
   const leaveRoom = useCallback(async () => {
@@ -803,6 +1134,9 @@ export function useRaceRoom(bank: ProblemBank) {
     saveSession(null);
     setMeta(null);
     setPlayers([]);
+    setSpectators([]);
+    setActivities({});
+    setActivityError(null);
     setProgress(EMPTY_PROGRESS);
     setProgressLoaded(false);
     setEvents([]);
@@ -811,22 +1145,36 @@ export function useRaceRoom(bank: ProblemBank) {
     const { database, db } = await getFirebaseContext();
     const { ref, remove, set } = db;
     if (current.role === "player") {
+      if (meta?.status === "active" && meta.createdAt) {
+        await remove(
+          ref(
+            database,
+            `raceActivity/${current.code}/${meta.createdAt}/${current.uid}`,
+          ),
+        ).catch(() => undefined);
+      }
       if (meta?.status === "lobby") {
         await remove(ref(database, `rooms/${current.code}/leaderboard/${current.uid}`));
         await remove(ref(database, `rooms/${current.code}/progress/${current.uid}`));
       } else {
         await set(ref(database, `rooms/${current.code}/leaderboard/${current.uid}/online`), false);
       }
+    } else if (current.role === "spectator") {
+      await remove(
+        ref(database, `rooms/${current.code}/spectators/${current.uid}`),
+      ).catch(() => undefined);
     }
-  }, [meta?.status, saveSession, session]);
+  }, [meta, saveSession, session]);
 
   const closeRoom = useCallback(async () => {
-    if (!session || session.role !== "host") return;
+    if (!session || session.role !== "host" || !meta) return;
     const { database, db } = await getFirebaseContext();
-    const { ref, remove } = db;
-    await remove(ref(database, `rooms/${session.code}`));
+    await db.update(db.ref(database), {
+      [`raceActivity/${session.code}/${meta.createdAt}`]: null,
+      [`rooms/${session.code}`]: null,
+    });
     saveSession(null);
-  }, [saveSession, session]);
+  }, [meta, saveSession, session]);
 
   const sortedPlayers = useMemo(() => sortRoomPlayers(players), [players]);
 
@@ -840,6 +1188,9 @@ export function useRaceRoom(bank: ProblemBank) {
     session,
     meta,
     players: sortedPlayers,
+    spectators,
+    activities,
+    activityError,
     progress,
     challenge,
     events,
@@ -851,6 +1202,8 @@ export function useRaceRoom(bank: ProblemBank) {
     leaveRoom,
     closeRoom,
     setReady,
+    publishActivity,
+    makeSpectator,
     setDuration,
     setUnlimited,
     startRace,

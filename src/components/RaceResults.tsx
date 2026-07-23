@@ -2,7 +2,7 @@ import { Crown, DoorClosed, LogOut, RotateCcw, Trophy } from "lucide-react";
 import type { RoomEndReason, RoomPlayer } from "../types/multiplayer";
 
 interface RaceResultsProps {
-  role: "host" | "player";
+  role: "host" | "player" | "spectator";
   code: string;
   players: RoomPlayer[];
   endReason: RoomEndReason;

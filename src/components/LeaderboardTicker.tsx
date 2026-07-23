@@ -6,9 +6,17 @@ interface LeaderboardTickerProps {
   racers: Racer[];
   events: RaceEvent[];
   simulated?: boolean;
+  selectedRacerId?: string | null;
+  onRacerSelect?: (racerId: string) => void;
 }
 
-export function LeaderboardTicker({ racers, events, simulated = false }: LeaderboardTickerProps) {
+export function LeaderboardTicker({
+  racers,
+  events,
+  simulated = false,
+  selectedRacerId,
+  onRacerSelect,
+}: LeaderboardTickerProps) {
   const highestScore = Math.max(1, ...racers.map((racer) => Math.max(0, racer.score)));
 
   return (
@@ -24,15 +32,36 @@ export function LeaderboardTicker({ racers, events, simulated = false }: Leaderb
 
       <div className="space-y-3 p-4">
         {racers.map((racer, index) => (
-          <motion.div key={racer.id} layout className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-2">
+          <motion.div
+            key={racer.id}
+            layout
+            className={`grid grid-cols-[1.5rem_1fr_auto] items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+              selectedRacerId === racer.id
+                ? "bg-sky-400/10 ring-1 ring-inset ring-sky-400/25"
+                : ""
+            }`}
+          >
             <span className={`text-xs font-black ${index === 0 ? "text-amber-300" : "text-slate-600"}`}>
               {index + 1}
             </span>
             <div className="min-w-0">
               <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                <span className={`truncate font-bold ${racer.isUser ? "text-sky-200" : "text-slate-300"}`}>
-                  {racer.name}
-                </span>
+                {onRacerSelect ? (
+                  <button
+                    type="button"
+                    aria-pressed={selectedRacerId === racer.id}
+                    onClick={() => onRacerSelect(racer.id)}
+                    className={`truncate text-left font-bold underline-offset-4 hover:text-sky-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+                      racer.isUser ? "text-sky-200" : "text-slate-300"
+                    }`}
+                  >
+                    {racer.name}
+                  </button>
+                ) : (
+                  <span className={`truncate font-bold ${racer.isUser ? "text-sky-200" : "text-slate-300"}`}>
+                    {racer.name}
+                  </span>
+                )}
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
                 <motion.div

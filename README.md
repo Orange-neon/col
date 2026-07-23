@@ -34,6 +34,13 @@ npm.cmd run preview
 
 Firebase Web configuration identifies the project but is not a private server secret. Database access is controlled by Authentication and `database.rules.json`.
 
+Competitive-room live monitoring and spectator mode use the same Firebase project and require no
+Cloudflare relay or additional secret. While a contestant is working, their current problem and
+source are synchronized to a private, room-generation-scoped path that only the host and current
+spectators may read. Contestants are notified about this visibility in the lobby and workspace.
+Live source is cleared on race finish, disconnect, explicit leave, spectator assignment, rematch,
+or room closure.
+
 For a GitHub Pages build, provide the same `VITE_FIREBASE_*` values as repository variables in the build workflow. Collaborative notebooks remain disabled until `VITE_COLLAB_RELAY_HOST` is also configured.
 
 After pulling changes that modify `database.rules.json`, republish that file from Realtime Database → Rules in the Firebase console.
@@ -85,6 +92,7 @@ This command runs judging, adaptive selection, ranking, countdown, room/session,
 - Randomized adaptive progression within each tier, with safe onboarding, stretch challenges, and per-problem difficulty bonuses
 - Open-ended solo practice with simulated peers, reset, quit, and local progress
 - Timed multiplayer rooms without Google sign-in, plus Google-authenticated unlimited rooms, live standings, results, and rematches
+- Host problem/code inspection, live source monitoring, and host-assigned spectators excluded from scoring and standings
 - Google-created collaborative rooms with Yjs-bound Monaco cells, participant cursors, shared runner-attributed output, and sandboxed browser-local Pyodide execution
 
 The v1 through v4 banks remain immutable for active rooms. The current v5 bank adds 300 distinct challenges without changing older rooms, ranging from first-print foundations through graphs and dynamic programming.

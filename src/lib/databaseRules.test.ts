@@ -31,6 +31,27 @@ describe("Realtime Database rule shape", () => {
     expect(String(progressUser)).toContain("$uid === auth.uid");
     expect(String(leaderboardUser)).toContain("hostUid");
     expect(String(progressUser)).toContain("hostUid");
+    expect(String(leaderboardUser)).toContain("spectators");
+    expect(String(leaderboardUser)).toContain("meta/status");
+    expect(String(progressUser)).toContain("spectators");
+    expect(String(progressUser)).toContain("leaderboard");
+  });
+
+  it("stores strict host-assigned spectator records and limits self writes to immutable records", () => {
+    const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
+    const spectator = (((room.spectators as RuleNode).$uid ?? {}) as RuleNode);
+    const writeRule = String(spectator[".write"]);
+    const validation = String(spectator[".validate"]);
+
+    expect(writeRule).toContain("$uid === auth.uid");
+    expect(writeRule).toContain("data.exists()");
+    expect(writeRule).toContain("!newData.exists()");
+    expect(writeRule).toContain("assignedAt");
+    expect(writeRule).not.toContain("newData.child('online').val() === data.child('online').val()");
+    expect(validation).toContain("normalizedNickname");
+    expect(validation).toContain("assignedAt");
+    expect(validation).toContain("online");
+    expect(((spectator.$other as RuleNode)[".validate"])).toBe(false);
   });
 
   it("bounds optional curriculum topic metadata", () => {
@@ -75,6 +96,7 @@ describe("Realtime Database rule shape", () => {
     expect(challengeWrite).toContain("val() !== true");
     expect(challengeWrite).toContain("child($code).child('meta/status').val() === 'active'");
     expect(challengeWrite).toContain("child('leaderboard').child(auth.uid)");
+    expect(challengeWrite).toContain("spectators");
     expect(challengeWrite).toContain("child('progress').child(auth.uid).child('currentStreak')");
     expect(challengeWrite).toContain("championUid");
     expect(challengeWrite).toContain("winnerUid");
@@ -82,6 +104,48 @@ describe("Realtime Database rule shape", () => {
     const progress = ((room.progress as RuleNode).$uid ?? {}) as RuleNode;
     const awards = ((progress.challengeAwards as RuleNode).$challengeId ?? {}) as RuleNode;
     expect(String(awards[".validate"])).toContain("-2000");
+  });
+
+  it("requires current contestants for player-driven finishes and race events", () => {
+    const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
+    const metaWrite = String((room.meta as RuleNode)[".write"]);
+    const eventWrite = String(
+      ((((room.events as RuleNode).$eventId ?? {}) as RuleNode)[".write"]),
+    );
+
+    expect(metaWrite).toContain("leaderboard");
+    expect(metaWrite).toContain("spectators");
+    expect(eventWrite).toContain("leaderboard");
+    expect(eventWrite).toContain("spectators");
+  });
+
+  it("keeps live race activity private to hosts and spectators", () => {
+    const activityCode = ((rules.raceActivity as RuleNode).$code ?? {}) as RuleNode;
+    const generation = ((activityCode.$generation ?? {}) as RuleNode);
+    const activity = ((generation.$uid ?? {}) as RuleNode);
+    const readRule = String(generation[".read"]);
+    const writeRule = String(activity[".write"]);
+    const validation = String(activity[".validate"]);
+
+    expect(String(activityCode[".write"])).toContain("!newData.exists()");
+    expect(readRule).toContain("meta/createdAt");
+    expect(readRule).toContain("meta/hostUid");
+    expect(readRule).toContain("meta/status");
+    expect(readRule).toContain("spectators");
+    expect(readRule).toContain("google.com");
+    expect(writeRule).toContain("$uid === auth.uid");
+    expect(writeRule).toContain("meta/status");
+    expect(writeRule).toContain("leaderboard");
+    expect(writeRule).toContain("spectators");
+    expect(writeRule).toContain("newData.exists()");
+    expect(writeRule).toContain("!newData.exists()");
+    expect(writeRule).toContain("meta/hostUid");
+    expect(validation).toContain("problemId");
+    expect(validation).toContain("'pending'");
+    expect(validation).toContain("'active'");
+    expect(validation).toContain("length <= 50000");
+    expect(validation).toContain("updatedAt");
+    expect(((activity.$other as RuleNode)[".validate"])).toBe(false);
   });
 
   it("requires Google authentication and a creator membership to create collaboration rooms", () => {

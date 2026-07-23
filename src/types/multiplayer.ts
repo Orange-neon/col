@@ -33,6 +33,22 @@ export interface RoomPlayer {
   ready: boolean;
 }
 
+export interface RoomSpectator {
+  uid: string;
+  nickname: string;
+  normalizedNickname: string;
+  joinedAt: number;
+  assignedAt: number;
+  online: boolean;
+}
+
+export interface RaceActivity {
+  problemId: string;
+  phase: "pending" | "active";
+  source: string;
+  updatedAt: number;
+}
+
 export interface PlayerProgress {
   score: number;
   solvedCount: number;
@@ -63,13 +79,15 @@ export interface RoomChallenge {
 export interface RoomSession {
   code: string;
   uid: string;
-  role: "host" | "player";
+  role: "host" | "player" | "spectator";
   nickname?: string;
 }
 
 export interface RoomSnapshot {
   meta: RoomMeta | null;
   players: RoomPlayer[];
+  spectators: RoomSpectator[];
+  activities: Record<string, RaceActivity>;
   progress: PlayerProgress;
   events: RaceEvent[];
 }

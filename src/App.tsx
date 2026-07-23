@@ -49,7 +49,7 @@ import {
 } from "./lib/problemHistory";
 import { finishRaceHistory, recordRaceProblem } from "./lib/raceHistory";
 import { formatCountdown, sortRoomPlayers } from "./lib/raceLogic";
-import type { RoomMeta, RoomSession } from "./types/multiplayer";
+import type { RaceActivity, RoomMeta, RoomSession } from "./types/multiplayer";
 import type { RaceController } from "./types/race";
 
 type PythonController = ReturnType<typeof usePyodide>;
@@ -120,6 +120,7 @@ interface GameShellProps {
   race: RaceController;
   python: PythonController;
   simulated?: boolean;
+  codeShared?: boolean;
   roomCode?: string;
   timeRemaining?: string;
   historyRaceId?: string;
@@ -132,6 +133,7 @@ function GameShell({
   race,
   python,
   simulated = false,
+  codeShared = false,
   roomCode,
   timeRemaining,
   historyRaceId,
@@ -466,7 +468,12 @@ function GameShell({
       <footer className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-6 pb-6 text-[11px] text-slate-700">
         <span>Problem bank {bank.version} · {bank.problems.length} challenge preview</span>
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5"><Sparkles size={11} /> Code stays in this browser</span>
+          <span className="flex items-center gap-1.5">
+            <Sparkles size={11} />
+            {codeShared
+              ? "The host and spectators can view your current code live"
+              : "Code stays in this browser"}
+          </span>
           {onExit && (
             <button type="button" onClick={onExit} className="flex items-center gap-1 text-slate-500 hover:text-white"><ArrowLeft size={12} /> Quit</button>
           )}
@@ -569,7 +576,7 @@ interface RoomPageProps {
   session: RoomSession;
 }
 
-function HostRoom({ room, session }: RoomPageProps) {
+function HostRoom({ bank, room, session }: RoomPageProps) {
   const meta = room.meta!;
   const { confirm, notify } = useFeedback();
   const expire = useCallback(() => room.finishRace("time"), [room.finishRace]);
@@ -587,6 +594,28 @@ function HostRoom({ room, session }: RoomPageProps) {
       notify({ tone: "info", title: "Room closed", message: "All participants have been disconnected." });
     }
   };
+  const makeSpectator = async (uid: string) => {
+    const player = room.players.find((item) => item.uid === uid);
+    if (!player) throw new Error("That contestant is no longer in the race.");
+    const endsRace = meta.status === "active" && room.players.length === 1;
+    const confirmed = await confirm({
+      title: `Make ${player.nickname} a spectator?`,
+      message: endsRace
+        ? "Their score and placement will be removed. Because they are the final contestant, this will also end the race."
+        : "Their current score and placement will be removed. They will stop competing and can view contestants' live code.",
+      confirmLabel: "Make spectator",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    await room.makeSpectator(uid);
+    notify({
+      tone: "info",
+      title: `${player.nickname} is spectating`,
+      message: endsRace
+        ? "They were the final contestant, so the race has ended."
+        : "They have been removed from the standings and can now inspect live code.",
+    });
+  };
 
   if (meta.status === "lobby") {
     return (
@@ -594,6 +623,7 @@ function HostRoom({ room, session }: RoomPageProps) {
         role="host"
         code={session.code}
         players={room.players}
+        spectators={room.spectators}
         durationSeconds={meta.durationSeconds}
         unlimited={Boolean(meta.unlimited)}
         onDurationChange={room.setDuration}
@@ -615,6 +645,7 @@ function HostRoom({ room, session }: RoomPageProps) {
             });
           });
         }}
+        onMakeSpectator={makeSpectator}
         onLeave={() => void closeRoom()}
       />
     );
@@ -639,6 +670,12 @@ function HostRoom({ room, session }: RoomPageProps) {
       timeRemaining={timeRemaining}
       players={room.players}
       events={room.events}
+      bank={bank}
+      activities={room.activities}
+      monitoringError={room.activityError}
+      spectators={room.spectators}
+      canManage
+      onMakeSpectator={makeSpectator}
       onStop={() => void room.finishRace("host")}
     />
   );
@@ -684,6 +721,7 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
         role="player"
         code={session.code}
         players={room.players}
+        spectators={room.spectators}
         durationSeconds={meta.durationSeconds}
         unlimited={Boolean(meta.unlimited)}
         pythonStatus={python.status}
@@ -717,6 +755,54 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
   );
 }
 
+function SpectatorRoom({ bank, room, session }: RoomPageProps) {
+  const meta = room.meta!;
+  const ignoreExpiry = useCallback(() => undefined, []);
+  const countdown = useCountdown(meta, room.serverNow, ignoreExpiry);
+  const timeRemaining = meta.unlimited ? "Unlimited" : countdown;
+
+  if (meta.status === "lobby") {
+    return (
+      <RoomLobby
+        role="spectator"
+        code={session.code}
+        players={room.players}
+        spectators={room.spectators}
+        durationSeconds={meta.durationSeconds}
+        unlimited={Boolean(meta.unlimited)}
+        onLeave={() => void room.leaveRoom()}
+      />
+    );
+  }
+
+  if (meta.status === "finished") {
+    return (
+      <RaceResults
+        role="spectator"
+        code={session.code}
+        players={room.players}
+        endReason={meta.endReason}
+        onLeave={() => void room.leaveRoom()}
+      />
+    );
+  }
+
+  return (
+    <HostDashboard
+      code={session.code}
+      timeRemaining={timeRemaining}
+      players={room.players}
+      events={room.events}
+      bank={bank}
+      activities={room.activities}
+      monitoringError={room.activityError}
+      spectators={room.spectators}
+      canManage={false}
+      onLeave={() => void room.leaveRoom()}
+    />
+  );
+}
+
 function ActivePlayerGame({
   bank,
   room,
@@ -739,12 +825,61 @@ function ActivePlayerGame({
     recordChallengeSolve: room.recordChallengeSolve,
     challenge: room.challenge,
   });
+  const sharedActivityRef = useRef<Omit<RaceActivity, "updatedAt"> | null>(null);
+  const sharedProblem = race.activeProblem ?? race.pendingProblem;
+  sharedActivityRef.current = sharedProblem
+    ? {
+        problemId: sharedProblem.id,
+        phase: race.activeProblem ? "active" : "pending",
+        source: race.activeProblem ? race.editorCode : "",
+      }
+    : null;
+
+  useEffect(() => {
+    let acknowledgedProblemId: string | null | undefined;
+    let acknowledgedPhase: RaceActivity["phase"] | null | undefined;
+    let acknowledgedSource: string | null | undefined;
+    let inFlight = false;
+    const publish = () => {
+      if (inFlight) return;
+      const activity = sharedActivityRef.current;
+      const problemId = activity?.problemId ?? null;
+      const phase = activity?.phase ?? null;
+      const source = activity?.source ?? null;
+      if (
+        problemId === acknowledgedProblemId &&
+        phase === acknowledgedPhase &&
+        source === acknowledgedSource
+      ) {
+        return;
+      }
+      inFlight = true;
+      void room
+        .publishActivity(activity)
+        .then(() => {
+          acknowledgedProblemId = problemId;
+          acknowledgedPhase = phase;
+          acknowledgedSource = source;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+    publish();
+    const intervalId = window.setInterval(publish, 350);
+    return () => {
+      window.clearInterval(intervalId);
+      void room.publishActivity(null).catch(() => undefined);
+    };
+  }, [room.publishActivity]);
 
   return (
     <GameShell
       bank={bank}
       race={race}
       python={python}
+      codeShared
       roomCode={session.code}
       timeRemaining={timeRemaining}
       historyRaceId={historyRaceId}
@@ -879,6 +1014,8 @@ function LoadedApp({ bank }: { bank: ProblemBank }) {
   const page =
     room.session.role === "host" ? (
       <HostRoom bank={pinnedBank} room={room} session={room.session} />
+    ) : room.session.role === "spectator" ? (
+      <SpectatorRoom bank={pinnedBank} room={room} session={room.session} />
     ) : (
       <PlayerRoom bank={pinnedBank} room={room} session={room.session} />
     );

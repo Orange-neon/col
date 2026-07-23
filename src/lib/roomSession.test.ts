@@ -89,6 +89,21 @@ describe("active room sessions", () => {
     expect(getRaceRoomSession(active)).toBeNull();
   });
 
+  it("round-trips a spectator race session", () => {
+    const storage = new MemoryStorage();
+    writeRaceRoomSession(
+      { code: "ABC234", uid: "viewer-1", role: "spectator", nickname: "Grace" },
+      storage,
+    );
+
+    expect(getRaceRoomSession(readActiveRoomSession(storage))).toEqual({
+      code: "ABC234",
+      uid: "viewer-1",
+      role: "spectator",
+      nickname: "Grace",
+    });
+  });
+
   it("only clears a session when its kind matches", () => {
     const storage = new MemoryStorage();
     writeRaceRoomSession({ code: "ABC234", uid: "host-1", role: "host" }, storage);

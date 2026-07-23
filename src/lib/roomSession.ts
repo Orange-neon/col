@@ -16,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isRaceRole(value: unknown): value is RoomSession["role"] {
-  return value === "host" || value === "player";
+  return value === "host" || value === "player" || value === "spectator";
 }
 
 function parseRaceSession(value: unknown): RaceActiveRoomSession | null {
