@@ -335,8 +335,10 @@ describe("competitive race Realtime Database rules", () => {
     );
 
     const updatedRoom = await assertSucceeds(host.ref(ROOM_PATH).once("value"));
+    const { lastAcceptedAt, ...persistedReturningPlayer } = returningPlayer;
+    expect(lastAcceptedAt).toBeNull();
     expect(updatedRoom.child("spectators/spectator").exists()).toBe(false);
-    expect(updatedRoom.child("leaderboard/spectator").val()).toEqual(returningPlayer);
+    expect(updatedRoom.child("leaderboard/spectator").val()).toEqual(persistedReturningPlayer);
     expect(updatedRoom.child("progress/spectator").val()).toEqual(progress());
 
     const promoted = anonymousDatabase("spectator");
