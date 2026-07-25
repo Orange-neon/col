@@ -33,10 +33,13 @@ export function hasPendingChallengeSettlement(
   );
 }
 
-export function closeRaceRoomIfChallengeSettled(
+export function closeRaceRoom(
   room: RaceRoomLifecycleState | null,
 ): null | undefined {
-  if (!room || hasPendingChallengeSettlement(room)) return undefined;
+  if (!room) return undefined;
+  // Closing deletes the room, so there is no durable score record to protect by
+  // waiting for challenge settlement. A failed or delayed settlement must
+  // never trap the host inside a room they explicitly chose to close.
   return null;
 }
 

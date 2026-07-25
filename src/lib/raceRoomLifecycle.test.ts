@@ -6,7 +6,7 @@ import type {
   RoomPlayer,
 } from "../types/multiplayer";
 import {
-  closeRaceRoomIfChallengeSettled,
+  closeRaceRoom,
   createRaceProgress,
   expireRaceBomb,
   finishActiveRace,
@@ -510,7 +510,7 @@ describe("competitive room lifecycle", () => {
     ).toBeUndefined();
   });
 
-  it("blocks close on an unseen finished winner but allows non-winning challenge states", () => {
+  it("allows close even while a final challenge settlement is pending", () => {
     const base: RaceRoomLifecycleState = {
       meta: meta({
         status: "finished",
@@ -532,12 +532,10 @@ describe("competitive room lifecycle", () => {
       challenge: finishedChallenge(),
     };
 
-    expect(closeRaceRoomIfChallengeSettled(stalePrefetchedRoom)).toBeNull();
+    expect(closeRaceRoom(stalePrefetchedRoom)).toBeNull();
+    expect(closeRaceRoom(freshFinishedRoom)).toBeNull();
     expect(
-      closeRaceRoomIfChallengeSettled(freshFinishedRoom),
-    ).toBeUndefined();
-    expect(
-      closeRaceRoomIfChallengeSettled({
+      closeRaceRoom({
         ...base,
         challenge: {
           ...finishedChallenge(),
@@ -559,7 +557,7 @@ describe("competitive room lifecycle", () => {
       })?.meta.status,
     ).toBe("lobby");
     expect(
-      closeRaceRoomIfChallengeSettled({
+      closeRaceRoom({
         ...base,
         challenge: finishedChallenge({ winnerUid: null }),
       }),

@@ -34,7 +34,7 @@ import {
   updateRaceActivityRecord,
 } from "../lib/raceActivity";
 import {
-  closeRaceRoomIfChallengeSettled,
+  closeRaceRoom as closeRaceRoomState,
   createRaceProgress,
   expireRaceBomb,
   finishActiveRace,
@@ -49,6 +49,7 @@ import {
   startReadyRace,
   type RaceRoomLifecycleState,
 } from "../lib/raceRoomLifecycle";
+import { runWithRealtimeValueLoaded } from "../lib/realtimeValue";
 import type {
   PlayerProgress,
   RaceActivity,
@@ -70,6 +71,17 @@ function normalizeNickname(value: string): string {
 
 function hasGoogleProvider(user: { providerData: Array<{ providerId: string }> }): boolean {
   return user.providerData.some((provider) => provider.providerId === "google.com");
+}
+
+async function runLoadedRoomTransaction<T>(
+  db: typeof import("firebase/database"),
+  roomRef: import("firebase/database").DatabaseReference,
+  updateRoom: (current: T | null) => T | null | undefined,
+): Promise<import("firebase/database").TransactionResult> {
+  return runWithRealtimeValueLoaded(
+    (onLoaded, onError) => db.onValue(roomRef, onLoaded, onError),
+    () => db.runTransaction(roomRef, updateRoom, { applyLocally: false }),
+  );
 }
 
 export function useRaceRoom(bank: ProblemBank) {
@@ -733,8 +745,8 @@ export function useRaceRoom(bank: ProblemBank) {
       const roomPath = `rooms/${session.code}`;
       const { database, db } = await getFirebaseContext();
       const roomRef = db.ref(database, roomPath);
-      await db.get(roomRef);
-      const result = await db.runTransaction(
+      const result = await runLoadedRoomTransaction(
+        db,
         roomRef,
         (
           current:
@@ -749,6 +761,12 @@ export function useRaceRoom(bank: ProblemBank) {
         ) => moveRacePlayerToSpectators(current, uid, now),
       );
       if (!result.committed) {
+        const current = result.snapshot.val() as
+          | {
+              spectators?: Record<string, RoomSpectator>;
+            }
+          | null;
+        if (current?.spectators?.[uid]) return;
         throw new Error("That contestant is no longer in the race.");
       }
       await db.remove(
@@ -775,7 +793,6 @@ export function useRaceRoom(bank: ProblemBank) {
       const roomPath = `rooms/${session.code}`;
       const { database, db } = await getFirebaseContext();
       const roomRef = db.ref(database, roomPath);
-      await db.get(roomRef);
       const activityRef = db.ref(
         database,
         `raceActivity/${session.code}/${meta.createdAt}/${uid}`,
@@ -783,7 +800,8 @@ export function useRaceRoom(bank: ProblemBank) {
       const result = await promoteRaceSpectatorAfterActivityCleanup(
         () => db.remove(activityRef),
         () =>
-          db.runTransaction(
+          runLoadedRoomTransaction(
+            db,
             roomRef,
             (
               current:
@@ -799,6 +817,12 @@ export function useRaceRoom(bank: ProblemBank) {
           ),
       );
       if (!result.committed) {
+        const current = result.snapshot.val() as
+          | {
+              leaderboard?: Record<string, RoomPlayer>;
+            }
+          | null;
+        if (current?.leaderboard?.[uid]) return;
         throw new Error("That spectator is no longer in the room.");
       }
       await addEvent(`${spectator.nickname} is now a contestant`, "neutral").catch(
@@ -846,8 +870,8 @@ export function useRaceRoom(bank: ProblemBank) {
     }
     const now = Date.now() + serverOffsetRef.current;
     const roomRef = db.ref(database, `rooms/${session.code}`);
-    await db.get(roomRef);
-    const result = await db.runTransaction(
+    const result = await runLoadedRoomTransaction(
+      db,
       roomRef,
       (
         current: {
@@ -863,6 +887,10 @@ export function useRaceRoom(bank: ProblemBank) {
           }
         | null;
       if (current?.meta?.status === "active") return;
+      if (!current?.meta) throw new Error("This room has been closed.");
+      if (current.meta.status === "finished") {
+        throw new Error("This race has already finished.");
+      }
       throw new Error("Every contestant must be ready before the race can start.");
     }
     await addEvent("The host started the race", "good").catch(() => undefined);
@@ -1143,8 +1171,8 @@ export function useRaceRoom(bank: ProblemBank) {
       }
       const { database, db } = await getFirebaseContext();
       const roomRef = db.ref(database, `rooms/${session.code}`);
-      await db.get(roomRef);
-      await db.runTransaction(
+      await runLoadedRoomTransaction(
+        db,
         roomRef,
         (
           current:
@@ -1222,10 +1250,10 @@ export function useRaceRoom(bank: ProblemBank) {
     const { database, db } = await getFirebaseContext();
     await db.remove(
       db.ref(database, `raceActivity/${session.code}/${meta.createdAt}`),
-    );
+    ).catch(() => undefined);
     const roomRef = db.ref(database, `rooms/${session.code}`);
-    await db.get(roomRef);
-    const result = await db.runTransaction(
+    const result = await runLoadedRoomTransaction(
+      db,
       roomRef,
       (
         current:
@@ -1290,10 +1318,10 @@ export function useRaceRoom(bank: ProblemBank) {
     const { database, db } = await getFirebaseContext();
     await db.remove(
       db.ref(database, `raceActivity/${session.code}/${meta.createdAt}`),
-    );
+    ).catch(() => undefined);
     const roomRef = db.ref(database, `rooms/${session.code}`);
-    await db.get(roomRef);
-    const result = await db.runTransaction(
+    const result = await runLoadedRoomTransaction(
+      db,
       roomRef,
       (
         current:
@@ -1301,12 +1329,14 @@ export function useRaceRoom(bank: ProblemBank) {
               events?: Record<string, unknown>;
             })
           | null,
-      ) => closeRaceRoomIfChallengeSettled(current),
+      ) => closeRaceRoomState(current),
     );
     if (!result.committed) {
-      throw new Error(
-        "The final challenge result is still being saved. Try closing the room again in a moment.",
-      );
+      if (!result.snapshot.exists()) {
+        saveSession(null);
+        return;
+      }
+      throw new Error("The room changed while it was closing. Please try again.");
     }
     saveSession(null);
   }, [meta, saveSession, session]);
