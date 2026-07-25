@@ -35,14 +35,6 @@ export function collaborationCursorStyles(
 ): string {
   const styles: string[] = [];
 
-  if (localClientId !== null && validClientId(localClientId)) {
-    styles.push(
-      `.collaboration-notebook .yRemoteSelection-${localClientId}{background:transparent!important}` +
-        `.collaboration-notebook .yRemoteSelectionHead-${localClientId}{border-left-color:transparent!important;display:none!important}` +
-        `.collaboration-notebook .yRemoteSelectionHead-${localClientId}::after{content:none!important;display:none!important}`,
-    );
-  }
-
   for (const participant of participants) {
     if (
       participant.local ||

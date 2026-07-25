@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MonacoBinding } from "y-monaco";
 import type { CollaborationAwareness } from "../hooks/useCollaborationRelay";
+import { collaborationEditorAwareness } from "../lib/collaborationEditorAwareness";
 import {
   MAX_CELL_SOURCE_BYTES,
   MAX_CELL_STDIN_BYTES,
@@ -175,7 +176,12 @@ export function CollaborativeCodeCell({
   useEffect(() => {
     const model = editor?.getModel();
     if (!editor || !model) return;
-    const binding = new MonacoBinding(cell.source, model, new Set([editor]), awareness);
+    const binding = new MonacoBinding(
+      cell.source,
+      model,
+      new Set([editor]),
+      collaborationEditorAwareness(awareness),
+    );
     bindingRef.current = binding;
     return () => {
       if (bindingRef.current === binding) bindingRef.current = null;

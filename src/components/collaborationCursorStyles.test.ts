@@ -2,19 +2,14 @@ import { describe, expect, it } from "vitest";
 import { collaborationCursorStyles } from "./collaborationCursorStyles";
 
 describe("collaboration cursor styles", () => {
-  it("hides the bridged local cursor and labels remote cursors", () => {
+  it("only styles and labels remote cursors", () => {
     const styles = collaborationCursorStyles(7, [
       { clientId: 7, nickname: "Me", color: "#34d399", local: true },
       { clientId: 12, nickname: "Alice", color: "#fb7185", local: false },
     ]);
 
-    expect(styles).toContain(".yRemoteSelection-7{background:transparent!important}");
-    expect(styles).toContain(
-      ".yRemoteSelectionHead-7{border-left-color:transparent!important;display:none!important}",
-    );
-    expect(styles).toContain(
-      ".yRemoteSelectionHead-7::after{content:none!important;display:none!important}",
-    );
+    expect(styles).not.toContain(".yRemoteSelection-7");
+    expect(styles).not.toContain(".yRemoteSelectionHead-7");
     expect(styles).toContain(".yRemoteSelectionHead-12{border-left-color:#fb7185;");
     expect(styles).toContain('--collaboration-cursor-name:"\\41 \\6c \\69 \\63 \\65 "');
     expect(styles).not.toContain("\\4d \\65 ");
