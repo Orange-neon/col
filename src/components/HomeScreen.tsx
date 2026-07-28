@@ -54,9 +54,7 @@ export function HomeScreen({
   const [code, setCode] = useState("");
   const [collaborationCode, setCollaborationCode] = useState("");
   const [nickname, setNickname] = useState("");
-  const [topics, setTopics] = useState<CurriculumTopicId[]>(() =>
-    getDefaultTopicSelection(bank),
-  );
+  const [topics, setTopics] = useState<CurriculumTopicId[]>(getDefaultTopicSelection);
   const [busy, setBusy] = useState<
     "auth" | "create" | "join" | "create-collaboration" | "join-collaboration" | null
   >(null);
@@ -204,7 +202,7 @@ export function HomeScreen({
             </div>
             <button
               type="button"
-              disabled={!configured || busy !== null}
+              disabled={!configured || busy !== null || topics.length === 0}
               onClick={() => perform("create", () => onCreateRoom(topics))}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-200 hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -216,8 +214,9 @@ export function HomeScreen({
             </div>
             <button
               type="button"
+              disabled={topics.length === 0}
               onClick={() => onSolo(topics)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-slate-800 hover:text-white"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Gamepad2 size={17} /> Solo practice
             </button>

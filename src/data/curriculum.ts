@@ -53,29 +53,15 @@ export function getTopicCounts(bank: ProblemBank): Record<CurriculumTopicId, num
   return counts;
 }
 
-export function getDefaultTopicSelection(bank: ProblemBank): CurriculumTopicId[] {
-  const counts = getTopicCounts(bank);
-  for (let index = CURRICULUM_TOPICS.length - 1; index >= 0; index -= 1) {
-    const topic = CURRICULUM_TOPICS[index];
-    if (counts[topic.id] > 0) return [topic.id];
-  }
+export function getDefaultTopicSelection(): CurriculumTopicId[] {
   return [];
-}
-
-export function expandTopicSelection(selected: CurriculumTopicId[]): CurriculumTopicId[] {
-  const selectedIndexes = selected
-    .map((id) => CURRICULUM_TOPICS.findIndex((topic) => topic.id === id))
-    .filter((index) => index >= 0);
-  if (!selectedIndexes.length) return [];
-  const highestIndex = Math.max(...selectedIndexes);
-  return CURRICULUM_TOPICS.slice(0, highestIndex + 1).map((topic) => topic.id);
 }
 
 export function filterProblemBankByTopics(
   bank: ProblemBank,
   selected: CurriculumTopicId[],
 ): ProblemBank {
-  const included = new Set(expandTopicSelection(selected));
+  const included = new Set(selected);
   return {
     ...bank,
     problems: bank.problems.filter((problem) => included.has(getProblemTopic(problem))),

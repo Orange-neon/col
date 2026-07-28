@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { loadProblemBank } from "./problemBank";
 import {
   CURRICULUM_TOPICS,
-  expandTopicSelection,
   filterProblemBankByTopics,
   getDefaultTopicSelection,
   getProblemTopic,
@@ -12,20 +11,8 @@ import {
 } from "./curriculum";
 
 describe("curriculum topic selection", () => {
-  it("includes every earlier prerequisite through the hardest selected topic", () => {
-    expect(expandTopicSelection(["functions"])).toEqual([
-      "hello-world",
-      "fundamentals",
-      "control-flow",
-      "loops",
-      "strings",
-      "lists",
-      "dictionaries",
-      "functions",
-    ]);
-    expect(expandTopicSelection(["control-flow", "lists"])).toEqual(
-      CURRICULUM_TOPICS.slice(0, 6).map((topic) => topic.id),
-    );
+  it("starts without any topics selected", () => {
+    expect(getDefaultTopicSelection()).toEqual([]);
   });
 
   it("classifies and filters the existing bank without losing problems", async () => {
@@ -44,7 +31,11 @@ describe("curriculum topic selection", () => {
       classes: 68,
     });
     expect(Object.values(counts).reduce((total, count) => total + count, 0)).toBe(600);
-    expect(filterProblemBankByTopics(bank, getDefaultTopicSelection(bank)).problems).toHaveLength(600);
+    const scoped = filterProblemBankByTopics(bank, ["classes", "modules"]);
+    expect(scoped.problems).toHaveLength(counts.classes + counts.modules);
+    expect(
+      scoped.problems.every((problem) => ["classes", "modules"].includes(getProblemTopic(problem))),
+    ).toBe(true);
   });
 
   it("doubles every topic within every difficulty tier", async () => {
