@@ -52,6 +52,8 @@ import {
 import { runWithRealtimeValueLoaded } from "../lib/realtimeValue";
 import type {
   PlayerProgress,
+  RaceAcceptedSubmission,
+  RaceAcceptedSubmissions,
   RaceActivity,
   RoomChallenge,
   RoomMeta,
@@ -92,6 +94,8 @@ export function useRaceRoom(bank: ProblemBank) {
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
   const [spectators, setSpectators] = useState<RoomSpectator[]>([]);
   const [activities, setActivities] = useState<Record<string, RaceActivity>>({});
+  const [acceptedSubmissions, setAcceptedSubmissions] =
+    useState<RaceAcceptedSubmissions>({});
   const [activityError, setActivityError] = useState<string | null>(null);
   const [progress, setProgress] = useState<PlayerProgress>(createRaceProgress);
   const [progressLoaded, setProgressLoaded] = useState(false);
@@ -396,9 +400,11 @@ export function useRaceRoom(bank: ProblemBank) {
       !session ||
       !meta ||
       meta.status !== "active" ||
+      typeof meta.startedAt !== "number" ||
       (session.role !== "host" && session.role !== "spectator")
     ) {
       setActivities({});
+      setAcceptedSubmissions({});
       setActivityError(null);
       return;
     }
@@ -406,6 +412,7 @@ export function useRaceRoom(bank: ProblemBank) {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     setActivities({});
+    setAcceptedSubmissions({});
     getFirebaseContext()
       .then(({ database, db }) => {
         if (cancelled) return;
@@ -414,11 +421,16 @@ export function useRaceRoom(bank: ProblemBank) {
           database,
           `raceActivity/${session.code}/${meta.createdAt}`,
         );
+        const submissionsRef = db.ref(
+          database,
+          `raceSubmissions/${session.code}/${meta.startedAt}`,
+        );
         let failed = false;
         const handleFailure = () => {
           if (cancelled || failed) return;
           failed = true;
           setActivities({});
+          setAcceptedSubmissions({});
           setActivityError(
             "Live code monitoring is unavailable. Publish the included Firebase database rules, then reconnect.",
           );
@@ -447,6 +459,16 @@ export function useRaceRoom(bank: ProblemBank) {
           db.onChildAdded(activityRef, applySnapshot, handleFailure),
           db.onChildChanged(activityRef, applySnapshot, handleFailure),
           db.onChildRemoved(activityRef, removeSnapshot, handleFailure),
+          db.onValue(
+            submissionsRef,
+            (snapshot) => {
+              setAcceptedSubmissions(
+                (snapshot.val() ?? {}) as RaceAcceptedSubmissions,
+              );
+              setActivityError(null);
+            },
+            handleFailure,
+          ),
         ];
         unsubscribe = () => cleanups.forEach((cleanup) => cleanup());
         /*
@@ -457,6 +479,7 @@ export function useRaceRoom(bank: ProblemBank) {
       .catch(() => {
         if (!cancelled) {
           setActivities({});
+          setAcceptedSubmissions({});
           setActivityError("Live code monitoring could not connect.");
         }
       });
@@ -464,7 +487,7 @@ export function useRaceRoom(bank: ProblemBank) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [meta?.createdAt, meta?.status, session]);
+  }, [meta?.createdAt, meta?.startedAt, meta?.status, session]);
 
   useEffect(() => {
     if (!connected || !session || session.role !== "player" || !meta) return;
@@ -736,6 +759,41 @@ export function useRaceRoom(bank: ProblemBank) {
     [meta?.createdAt, meta?.status, session],
   );
 
+  const recordAcceptedSubmission = useCallback(
+    async (problem: Problem, source: string): Promise<void> => {
+      if (
+        !session ||
+        session.role !== "player" ||
+        !meta ||
+        meta.status !== "active" ||
+        typeof meta.startedAt !== "number"
+      ) {
+        return;
+      }
+      const { database, db } = await getFirebaseContext({
+        requireGoogle: Boolean(meta.unlimited),
+      });
+      const acceptedAt = Date.now() + serverOffsetRef.current;
+      const submissionRef = db.ref(
+        database,
+        `raceSubmissions/${session.code}/${meta.startedAt}/${session.uid}/${problem.id}`,
+      );
+      await db.runTransaction(
+        submissionRef,
+        (current: RaceAcceptedSubmission | null) =>
+          current === null
+            ? {
+                problemId: problem.id,
+                source: source.slice(0, 50_000),
+                acceptedAt,
+              }
+            : undefined,
+        { applyLocally: false },
+      );
+    },
+    [meta, session],
+  );
+
   const makeSpectator = useCallback(
     async (uid: string) => {
       if (!session || session.role !== "host" || !meta) return;
@@ -989,7 +1047,7 @@ export function useRaceRoom(bank: ProblemBank) {
   ]);
 
   const recordSolve = useCallback(
-    async (problem: Problem, multiplier = 1): Promise<number> => {
+    async (problem: Problem, multiplier = 1, source = ""): Promise<number> => {
       if (!session || session.role !== "player" || meta?.status !== "active") {
         throw new Error("The race is not active.");
       }
@@ -1017,13 +1075,14 @@ export function useRaceRoom(bank: ProblemBank) {
         `${session.nickname} solved ${problem.title} (+${points})`,
         "good",
       ).catch(() => undefined);
+      await recordAcceptedSubmission(problem, source).catch(() => undefined);
       await activateWaitingChallenge(now).catch(() => undefined);
       if (!meta.unlimited && next.solvedCount >= meta.problemCount) {
         await finishRace("completed").catch(() => undefined);
       }
       return points;
     },
-    [activateWaitingChallenge, addEvent, finishRace, meta, session],
+    [activateWaitingChallenge, addEvent, finishRace, meta, recordAcceptedSubmission, session],
   );
 
   const recordForfeit = useCallback(
@@ -1251,6 +1310,11 @@ export function useRaceRoom(bank: ProblemBank) {
     await db.remove(
       db.ref(database, `raceActivity/${session.code}/${meta.createdAt}`),
     ).catch(() => undefined);
+    if (typeof meta.startedAt === "number") {
+      await db.remove(
+        db.ref(database, `raceSubmissions/${session.code}/${meta.startedAt}`),
+      ).catch(() => undefined);
+    }
     const roomRef = db.ref(database, `rooms/${session.code}`);
     const result = await runLoadedRoomTransaction(
       db,
@@ -1282,6 +1346,7 @@ export function useRaceRoom(bank: ProblemBank) {
     setPlayers([]);
     setSpectators([]);
     setActivities({});
+    setAcceptedSubmissions({});
     setActivityError(null);
     setProgress(createRaceProgress());
     setProgressLoaded(false);
@@ -1319,6 +1384,9 @@ export function useRaceRoom(bank: ProblemBank) {
     await db.remove(
       db.ref(database, `raceActivity/${session.code}/${meta.createdAt}`),
     ).catch(() => undefined);
+    await db.remove(
+      db.ref(database, `raceSubmissions/${session.code}`),
+    ).catch(() => undefined);
     const roomRef = db.ref(database, `rooms/${session.code}`);
     const result = await runLoadedRoomTransaction(
       db,
@@ -1355,6 +1423,7 @@ export function useRaceRoom(bank: ProblemBank) {
     players: sortedPlayers,
     spectators,
     activities,
+    acceptedSubmissions,
     activityError,
     progress,
     challenge,
@@ -1369,6 +1438,7 @@ export function useRaceRoom(bank: ProblemBank) {
     closeRoom,
     setReady,
     publishActivity,
+    recordAcceptedSubmission,
     makeSpectator,
     makePlayer,
     setDuration,

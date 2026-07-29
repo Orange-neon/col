@@ -167,6 +167,28 @@ describe("Realtime Database rule shape", () => {
     expect(((activity.$other as RuleNode)[".validate"])).toBe(false);
   });
 
+  it("keeps immutable accepted submissions private to hosts and spectators", () => {
+    const submissionCode = ((rules.raceSubmissions as RuleNode).$code ?? {}) as RuleNode;
+    const generation = ((submissionCode.$generation ?? {}) as RuleNode);
+    const submission = ((((generation.$uid ?? {}) as RuleNode).$problemId ?? {}) as RuleNode);
+    const readRule = String(generation[".read"]);
+    const writeRule = String(submission[".write"]);
+    const validation = String(submission[".validate"]);
+
+    expect(readRule).toContain("meta/startedAt");
+    expect(readRule).toContain("meta/hostUid");
+    expect(readRule).toContain("spectators");
+    expect(readRule).toContain("google.com");
+    expect(writeRule).toContain("$uid === auth.uid");
+    expect(writeRule).toContain("leaderboard");
+    expect(writeRule).toContain("!data.exists()");
+    expect(validation).toContain("problemId");
+    expect(validation).toContain("source");
+    expect(validation).toContain("length <= 50000");
+    expect(validation).toContain("acceptedAt");
+    expect(((submission.$other as RuleNode)[".validate"])).toBe(false);
+  });
+
   it("requires Google authentication and a creator membership to create collaboration rooms", () => {
     const room = ((rules.collaborationRooms as RuleNode).$code ?? {}) as RuleNode;
     const roomWrite = String(room[".write"]);

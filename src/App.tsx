@@ -730,6 +730,7 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
       events={room.events}
       bank={bank}
       activities={room.activities}
+      acceptedSubmissions={room.acceptedSubmissions}
       monitoringError={room.activityError}
       spectators={room.spectators}
       canManage
@@ -854,6 +855,7 @@ function SpectatorRoom({ bank, room, session }: RoomPageProps) {
       events={room.events}
       bank={bank}
       activities={room.activities}
+      acceptedSubmissions={room.acceptedSubmissions}
       monitoringError={room.activityError}
       spectators={room.spectators}
       canManage={false}
@@ -878,6 +880,7 @@ function ActivePlayerGame({
     events: room.events,
     recordMiss: room.recordMiss,
     recordSolve: room.recordSolve,
+    recordAcceptedSubmission: room.recordAcceptedSubmission,
     recordForfeit: room.recordForfeit,
     recordBombExpiry: room.recordBombExpiry,
     requestChallenge: room.requestChallenge,

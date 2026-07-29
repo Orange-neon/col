@@ -49,6 +49,17 @@ export interface RaceActivity {
   updatedAt: number;
 }
 
+export interface RaceAcceptedSubmission {
+  problemId: string;
+  source: string;
+  acceptedAt: number;
+}
+
+export type RaceAcceptedSubmissions = Record<
+  string,
+  Record<string, RaceAcceptedSubmission>
+>;
+
 export interface PlayerProgress {
   score: number;
   solvedCount: number;
@@ -88,6 +99,7 @@ export interface RoomSnapshot {
   players: RoomPlayer[];
   spectators: RoomSpectator[];
   activities: Record<string, RaceActivity>;
+  acceptedSubmissions: RaceAcceptedSubmissions;
   progress: PlayerProgress;
   events: RaceEvent[];
 }

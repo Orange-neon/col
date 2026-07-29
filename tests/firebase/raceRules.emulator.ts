@@ -13,6 +13,7 @@ const ROOM_PATH = `rooms/${ROOM_CODE}`;
 const CREATED_AT = 1_720_000_000_000;
 const GENERATION = String(CREATED_AT);
 const ACTIVITY_PATH = `raceActivity/${ROOM_CODE}/${GENERATION}`;
+const SUBMISSION_PATH = `raceSubmissions/${ROOM_CODE}/${GENERATION}`;
 
 let testEnvironment: RulesTestEnvironment;
 
@@ -21,6 +22,12 @@ interface RaceActivity {
   phase: "pending" | "active";
   source: string;
   updatedAt: number;
+}
+
+interface RaceAcceptedSubmission {
+  problemId: string;
+  source: string;
+  acceptedAt: number;
 }
 
 function anonymousDatabase(uid: string) {
@@ -76,6 +83,17 @@ function activity(overrides: Partial<RaceActivity> = {}): RaceActivity {
     phase: "active",
     source: "print('hello')",
     updatedAt: CREATED_AT + 2_000,
+    ...overrides,
+  };
+}
+
+function submission(
+  overrides: Partial<RaceAcceptedSubmission> = {},
+): RaceAcceptedSubmission {
+  return {
+    problemId: "v5-example",
+    source: "print('accepted')",
+    acceptedAt: CREATED_AT + 2_500,
     ...overrides,
   };
 }
@@ -259,6 +277,74 @@ describe("competitive race Realtime Database rules", () => {
     await assertFails(target.set(activity({ source: "x".repeat(50_001) })));
     await assertFails(target.set({ ...activity(), extra: true }));
     await assertFails(target.set({ ...activity(), updatedAt: "later" }));
+  });
+
+  it("shows accepted submissions only to the host and current spectators", async () => {
+    await seedRoom();
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await context
+        .database()
+        .ref(`${SUBMISSION_PATH}/player/v5-example`)
+        .set(submission());
+    });
+
+    await assertSucceeds(anonymousDatabase("host").ref(SUBMISSION_PATH).once("value"));
+    await assertSucceeds(anonymousDatabase("spectator").ref(SUBMISSION_PATH).once("value"));
+    await assertFails(anonymousDatabase("player").ref(SUBMISSION_PATH).once("value"));
+    await assertFails(anonymousDatabase("outsider").ref(SUBMISSION_PATH).once("value"));
+  });
+
+  it("lets active contestants publish only their own immutable accepted submissions", async () => {
+    await seedRoom();
+    const player = anonymousDatabase("player");
+    const target = player.ref(`${SUBMISSION_PATH}/player/v5-example`);
+
+    await assertSucceeds(target.set(submission()));
+    await assertFails(target.set(submission({ source: "print('changed')" })));
+    await assertFails(
+      player.ref(`${SUBMISSION_PATH}/peer/v5-example`).set(submission()),
+    );
+    await assertFails(
+      player
+        .ref(`raceSubmissions/${ROOM_CODE}/${CREATED_AT + 1}/player/v5-example`)
+        .set(submission()),
+    );
+  });
+
+  it("validates accepted submissions and keeps unlimited history Google-gated", async () => {
+    await seedRoom(room({ unlimited: true, includeSpectator: true }));
+    const anonymousTarget = anonymousDatabase("player").ref(
+      `${SUBMISSION_PATH}/player/v5-example`,
+    );
+    const googleTarget = googleDatabase("player").ref(
+      `${SUBMISSION_PATH}/player/v5-example`,
+    );
+
+    await assertFails(anonymousTarget.set(submission()));
+    await assertFails(googleTarget.set(submission({ problemId: "other" })));
+    await assertFails(googleTarget.set(submission({ source: "x".repeat(50_001) })));
+    await assertFails(googleTarget.set({ ...submission(), extra: true }));
+    await assertSucceeds(googleTarget.set(submission()));
+    await assertFails(anonymousDatabase("spectator").ref(SUBMISSION_PATH).once("value"));
+    await assertSucceeds(googleDatabase("spectator").ref(SUBMISSION_PATH).once("value"));
+  });
+
+  it("blocks accepted submissions outside an active race and lets the host clear history", async () => {
+    await seedRoom(room({ status: "finished" }));
+    await assertFails(
+      anonymousDatabase("player")
+        .ref(`${SUBMISSION_PATH}/player/v5-example`)
+        .set(submission()),
+    );
+
+    await seedRoom();
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await context
+        .database()
+        .ref(`${SUBMISSION_PATH}/player/v5-example`)
+        .set(submission());
+    });
+    await assertSucceeds(anonymousDatabase("host").ref(SUBMISSION_PATH).remove());
   });
 
   it("lets the host delete an activity generation or the whole room activity tree", async () => {

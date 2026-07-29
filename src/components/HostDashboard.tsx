@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import type { ProblemBank } from "../data/problemTypes";
 import type {
+  RaceAcceptedSubmissions,
   RaceActivity,
   RoomPlayer,
   RoomSpectator,
@@ -27,6 +28,7 @@ interface HostDashboardProps {
   events: RaceEvent[];
   bank?: ProblemBank;
   activities?: Record<string, RaceActivity>;
+  acceptedSubmissions?: RaceAcceptedSubmissions;
   monitoringError?: string | null;
   spectators?: RoomSpectator[];
   canManage?: boolean;
@@ -43,6 +45,7 @@ export function HostDashboard({
   events,
   bank,
   activities = {},
+  acceptedSubmissions = {},
   monitoringError,
   spectators = [],
   canManage,
@@ -63,6 +66,11 @@ export function HostDashboard({
   }));
   const selectedPlayer = players.find((player) => player.uid === selectedUid) ?? null;
   const selectedActivity = selectedUid ? activities[selectedUid] ?? null : null;
+  const selectedSubmissions = selectedUid
+    ? Object.values(acceptedSubmissions[selectedUid] ?? {}).sort(
+        (left, right) => right.acceptedAt - left.acceptedAt,
+      )
+    : [];
   const selectedProblem =
     selectedActivity && bank
       ? bank.problems.find((problem) => problem.id === selectedActivity.problemId) ?? null
@@ -219,6 +227,8 @@ export function HostDashboard({
             player={selectedPlayer}
             problem={selectedProblem}
             activity={selectedActivity}
+            submissions={selectedSubmissions}
+            bank={bank}
             canManage={managementEnabled}
             onMakeSpectator={managementEnabled ? onMakeSpectator : undefined}
           />

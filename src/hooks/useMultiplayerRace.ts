@@ -62,7 +62,8 @@ interface MultiplayerRaceOptions {
   progress: PlayerProgress;
   events: RaceEvent[];
   recordMiss: (problem: Problem) => Promise<void>;
-  recordSolve: (problem: Problem, multiplier?: number) => Promise<number>;
+  recordSolve: (problem: Problem, multiplier?: number, source?: string) => Promise<number>;
+  recordAcceptedSubmission: (problem: Problem, source: string) => Promise<void>;
   recordForfeit: (problem: Problem) => Promise<void>;
   recordBombExpiry: (problem: Problem) => Promise<void>;
   requestChallenge: (difficulty: Difficulty) => Promise<void>;
@@ -79,6 +80,7 @@ export function useMultiplayerRace({
   events,
   recordMiss,
   recordSolve,
+  recordAcceptedSubmission,
   recordForfeit,
   recordBombExpiry,
   requestChallenge,
@@ -225,11 +227,15 @@ export function useMultiplayerRace({
               Date.now() <= draft.timedDeadline
               ? DOUBLE_MULTIPLIER
               : 1,
+            draft.editorCode,
           );
+      if (isChallenge && points > 0) {
+        await recordAcceptedSubmission(problem, draft.editorCode).catch(() => undefined);
+      }
       setDraft(EMPTY_DRAFT);
       return points;
     },
-    [challenge, challengeLoaded, challengeParticipant, draft.timedDeadline, recordChallengeSolve, recordSolve],
+    [challenge, challengeLoaded, challengeParticipant, draft.editorCode, draft.timedDeadline, recordAcceptedSubmission, recordChallengeSolve, recordSolve],
   );
 
   const forfeit = useCallback(

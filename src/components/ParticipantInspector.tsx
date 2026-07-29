@@ -1,6 +1,7 @@
 import Editor from "@monaco-editor/react";
 import {
   BookOpen,
+  CheckCircle2,
   Clock3,
   Eye,
   LoaderCircle,
@@ -9,14 +10,20 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DIFFICULTY_CONFIG } from "../data/difficulty";
-import type { Problem } from "../data/problemTypes";
-import type { RaceActivity, RoomPlayer } from "../types/multiplayer";
+import type { Problem, ProblemBank } from "../data/problemTypes";
+import type {
+  RaceAcceptedSubmission,
+  RaceActivity,
+  RoomPlayer,
+} from "../types/multiplayer";
 import { ProblemDescription } from "./ProblemDescription";
 
 interface ParticipantInspectorProps {
   player: RoomPlayer | null;
   problem: Problem | null;
   activity: RaceActivity | null;
+  submissions?: RaceAcceptedSubmission[];
+  bank?: ProblemBank;
   canManage?: boolean;
   onMakeSpectator?: (uid: string) => void | Promise<void>;
 }
@@ -40,16 +47,49 @@ export function ParticipantInspector({
   player,
   problem,
   activity,
+  submissions = [],
+  bank,
   canManage = false,
   onMakeSpectator,
 }: ParticipantInspectorProps) {
   const [assigning, setAssigning] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedSubmissionProblemId, setSelectedSubmissionProblemId] =
+    useState<string | null>(null);
 
   useEffect(() => {
     setAssigning(false);
     setActionError(null);
+    setSelectedSubmissionProblemId(null);
   }, [player?.uid]);
+
+  const selectedSubmission =
+    submissions.find(
+      (submission) => submission.problemId === selectedSubmissionProblemId,
+    ) ?? null;
+  const displayedProblem = selectedSubmission
+    ? bank?.problems.find(
+        (candidate) => candidate.id === selectedSubmission.problemId,
+      ) ?? null
+    : problem;
+  const displayedSource = selectedSubmission?.source ?? activity?.source ?? "";
+
+  useEffect(() => {
+    if (
+      selectedSubmissionProblemId &&
+      !submissions.some(
+        (submission) => submission.problemId === selectedSubmissionProblemId,
+      )
+    ) {
+      setSelectedSubmissionProblemId(null);
+    }
+  }, [selectedSubmissionProblemId, submissions]);
+
+  useEffect(() => {
+    if (!activity && !selectedSubmissionProblemId && submissions.length > 0) {
+      setSelectedSubmissionProblemId(submissions[0].problemId);
+    }
+  }, [activity, selectedSubmissionProblemId, submissions]);
 
   if (!player) {
     return (
@@ -115,7 +155,51 @@ export function ParticipantInspector({
         </p>
       )}
 
-      {!activity ? (
+      {submissions.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto border-b border-slate-700/70 bg-slate-950/35 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setSelectedSubmissionProblemId(null)}
+            className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+              selectedSubmission
+                ? "border-slate-700 text-slate-400 hover:text-white"
+                : "border-sky-400/40 bg-sky-400/10 text-sky-200"
+            }`}
+          >
+            Live code
+          </button>
+          {submissions.map((submission) => {
+            const submissionProblem = bank?.problems.find(
+              (candidate) => candidate.id === submission.problemId,
+            );
+            const selected = submission.problemId === selectedSubmission?.problemId;
+            return (
+              <button
+                key={submission.problemId}
+                type="button"
+                onClick={() => setSelectedSubmissionProblemId(submission.problemId)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-left text-xs transition ${
+                  selected
+                    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+                    : "border-slate-700 text-slate-400 hover:text-white"
+                }`}
+              >
+                <span className="block font-bold">
+                  {submissionProblem?.title ?? submission.problemId}
+                </span>
+                <span className="mt-0.5 block text-[10px] opacity-70">
+                  {new Date(submission.acceptedAt).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!activity && !selectedSubmission ? (
         <div className="grid min-h-[27rem] place-items-center p-8 text-center">
           <div className="max-w-sm">
             <div className="mx-auto grid size-12 place-items-center rounded-xl bg-slate-800/70 text-slate-500">
@@ -134,43 +218,57 @@ export function ParticipantInspector({
           <div className="border-b border-slate-700/70 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                <BookOpen size={13} /> Current problem
+                {selectedSubmission ? <CheckCircle2 size={13} /> : <BookOpen size={13} />}
+                {selectedSubmission ? "Accepted submission" : "Current problem"}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
                 <span
                   className={`rounded-full border px-2.5 py-1 ${
-                    activity.phase === "active"
+                    selectedSubmission
+                      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                      : activity?.phase === "active"
                       ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
                       : "border-amber-400/30 bg-amber-400/10 text-amber-200"
                   }`}
                 >
-                  {activity.phase === "active" ? "Editing" : "Pending"}
+                  {selectedSubmission
+                    ? "Accepted"
+                    : activity?.phase === "active"
+                      ? "Editing"
+                      : "Pending"}
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-slate-500">
-                  <Clock3 size={12} /> {formatUpdateTime(activity.updatedAt)}
+                  <Clock3 size={12} />{" "}
+                  {selectedSubmission
+                    ? formatUpdateTime(selectedSubmission.acceptedAt).replace("Updated", "Accepted")
+                    : formatUpdateTime(activity!.updatedAt)}
                 </span>
               </div>
             </div>
 
-            {problem ? (
+            {displayedProblem ? (
               <>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <h3 className="text-lg font-black text-white">{problem.title}</h3>
+                  <h3 className="text-lg font-black text-white">{displayedProblem.title}</h3>
                   <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${difficultyClass[problem.difficulty]}`}
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${difficultyClass[displayedProblem.difficulty]}`}
                   >
-                    {DIFFICULTY_CONFIG[problem.difficulty].label}
+                    {DIFFICULTY_CONFIG[displayedProblem.difficulty].label}
                   </span>
                 </div>
                 <div className="mt-3 max-h-48 overflow-y-auto pr-2">
-                  <ProblemDescription markdown={problem.description} />
+                  <ProblemDescription markdown={displayedProblem.description} />
                 </div>
               </>
             ) : (
               <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3">
                 <h3 className="font-black text-amber-100">Problem unavailable</h3>
                 <p className="mt-1 text-xs text-amber-200/70">
-                  The live activity references <span className="font-mono">{activity.problemId}</span>,
+                  This submission references{" "}
+                  <span className="font-mono">
+                    {selectedSubmission?.problemId ?? activity!.problemId}
+                  </span>
+                  ,
                   which is not in this room's problem bank.
                 </p>
               </div>
@@ -190,7 +288,7 @@ export function ParticipantInspector({
               height="22rem"
               language="python"
               theme="vs-dark"
-              value={activity.source}
+              value={displayedSource}
               loading={<div className="p-5 text-sm text-slate-500">Loading code viewer…</div>}
               options={{
                 readOnly: true,
