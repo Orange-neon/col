@@ -280,7 +280,7 @@ describe("competitive race Realtime Database rules", () => {
     expect(remaining.child("peer").val()).toEqual(activity({ problemId: "v5-peer" }));
   });
 
-  it("supports an atomic contestant join in the lobby", async () => {
+  it("supports atomic contestant joins in lobby and active rooms", async () => {
     await seedRoom(room({ status: "lobby", includePlayer: false }), {});
     const player = anonymousDatabase("player");
 
@@ -290,6 +290,37 @@ describe("competitive race Realtime Database rules", () => {
         "progress/player": progress(),
       }),
     );
+
+    await seedRoom(room({ status: "active", includePlayer: false }), {});
+    await assertSucceeds(
+      player.ref(ROOM_PATH).update({
+        "leaderboard/player": contestant("player", "Player"),
+        "progress/player": progress(),
+      }),
+    );
+  });
+
+  it("blocks fresh contestants from finished rooms", async () => {
+    await seedRoom(room({ status: "finished", includePlayer: false }), {});
+    const player = anonymousDatabase("player");
+
+    await assertFails(
+      player.ref(ROOM_PATH).update({
+        "leaderboard/player": contestant("player", "Player"),
+        "progress/player": progress(),
+      }),
+    );
+  });
+
+  it("requires Google authentication for late joins to active unlimited rooms", async () => {
+    await seedRoom(room({ status: "active", unlimited: true, includePlayer: false }), {});
+    const updates = {
+      "leaderboard/player": contestant("player", "Player"),
+      "progress/player": progress(),
+    };
+
+    await assertFails(anonymousDatabase("player").ref(ROOM_PATH).update(updates));
+    await assertSucceeds(googleDatabase("player").ref(ROOM_PATH).update(updates));
   });
 
   it("lets only the host assign spectators while spectators can only change online state", async () => {

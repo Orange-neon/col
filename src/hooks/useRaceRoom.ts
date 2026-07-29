@@ -643,8 +643,8 @@ export function useRaceRoom(bank: ProblemBank) {
         saveSession(next);
         return next;
       }
-      if (room.meta.status !== "lobby") {
-        throw new Error("This race has already started. Only returning participants can resume it.");
+      if (room.meta.status === "finished") {
+        throw new Error("This race has already finished. Only returning participants can view it.");
       }
       if (nickname.length < 2 || nickname.length > 20) {
         throw new Error("Nickname must be between 2 and 20 characters.");

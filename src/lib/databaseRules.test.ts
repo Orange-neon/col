@@ -37,6 +37,17 @@ describe("Realtime Database rule shape", () => {
     expect(String(progressUser)).toContain("leaderboard");
   });
 
+  it("allows fresh contestants to join lobby and active rooms but not finished rooms", () => {
+    const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
+    const leaderboardWrite = String(
+      (((room.leaderboard as RuleNode).$uid ?? {}) as RuleNode)[".write"],
+    );
+
+    expect(leaderboardWrite).toContain("meta/status').val() === 'lobby'");
+    expect(leaderboardWrite).toContain("meta/status').val() === 'active'");
+    expect(leaderboardWrite).not.toContain("meta/status').val() === 'finished'");
+  });
+
   it("stores strict host-assigned spectator records and limits self writes to immutable records", () => {
     const room = ((rules.rooms as RuleNode).$code ?? {}) as RuleNode;
     const spectator = (((room.spectators as RuleNode).$uid ?? {}) as RuleNode);
