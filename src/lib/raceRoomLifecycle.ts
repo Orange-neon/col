@@ -205,7 +205,9 @@ export function moveRacePlayerToSpectators<T extends RaceRoomLifecycleState>(
   const leaderboard = { ...(settledRoom.leaderboard ?? {}) };
   const progress = { ...(settledRoom.progress ?? {}) };
   delete leaderboard[uid];
-  delete progress[uid];
+  // Keep the contestant's authoritative progress while they spectate. The
+  // database rules prevent spectators from changing it, and promotion can
+  // therefore restore the same score and solved-problem history atomically.
 
   const shouldRetireChallenge = Boolean(
     settledRoom.challenge &&
@@ -248,6 +250,7 @@ export function moveRaceSpectatorToPlayers<T extends RaceRoomLifecycleState>(
 
   const spectators = { ...(room.spectators ?? {}) };
   delete spectators[uid];
+  const restoredProgress = normalizeRaceProgress(room.progress?.[uid] ?? null);
 
   return {
     ...room,
@@ -257,8 +260,8 @@ export function moveRaceSpectatorToPlayers<T extends RaceRoomLifecycleState>(
         uid: spectator.uid,
         nickname: spectator.nickname,
         normalizedNickname: spectator.normalizedNickname,
-        score: 0,
-        correctCount: 0,
+        score: restoredProgress.score,
+        correctCount: restoredProgress.solvedCount,
         joinedAt: spectator.joinedAt,
         lastAcceptedAt: null,
         online: spectator.online,
@@ -267,7 +270,7 @@ export function moveRaceSpectatorToPlayers<T extends RaceRoomLifecycleState>(
     },
     progress: {
       ...(room.progress ?? {}),
-      [uid]: createRaceProgress(),
+      [uid]: restoredProgress,
     },
     spectators,
   };

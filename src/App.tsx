@@ -623,8 +623,8 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
     const confirmed = await confirm({
       title: `Make ${player.nickname} a spectator?`,
       message: endsRace
-        ? "Their score and placement will be removed. Because they are the final contestant, this will also end the race."
-        : "Their current score and placement will be removed. They will stop competing and can view contestants' live code.",
+        ? "Their score and progress will be saved, but because they are the final contestant, this will also end the race."
+        : "Their score and progress will be saved while they are removed from the standings. They will stop competing and can view contestants' live code.",
       confirmLabel: "Make spectator",
       tone: "danger",
     });
@@ -645,8 +645,8 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
       title: `Make ${spectator.nickname} a contestant?`,
       message:
         meta.status === "active"
-          ? "They will rejoin the live standings with a fresh score and can immediately choose a problem."
-          : "They will return to the contestant list and can ready up before the race starts.",
+          ? "They will rejoin the live standings with their saved score and progress and can immediately choose a problem."
+          : "They will return to the contestant list with their saved progress and can ready up before the race starts.",
       confirmLabel: "Make contestant",
       tone: "primary",
     });
@@ -657,8 +657,8 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
       title: `${spectator.nickname} is competing`,
       message:
         meta.status === "active"
-          ? "They have rejoined the live race with a fresh score."
-          : "They can now load Python and ready up for the race.",
+          ? "Their saved score and progress have been restored."
+          : "Their saved progress has been restored, and they can now load Python and ready up.",
     });
   };
 

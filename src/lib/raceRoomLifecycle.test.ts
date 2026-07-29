@@ -228,7 +228,7 @@ describe("competitive room lifecycle", () => {
     expect(second.challengeAwards).not.toHaveProperty("duel");
   });
 
-  it("atomically demotes contestants and finishes when concurrent removals reach zero", () => {
+  it("atomically demotes contestants, preserves progress, and finishes when removals reach zero", () => {
     const activeMeta = meta({
       status: "active",
       startedAt: NOW - 10_000,
@@ -237,11 +237,16 @@ describe("competitive room lifecycle", () => {
     const room: RaceRoomLifecycleState = {
       meta: activeMeta,
       leaderboard: {
-        ada: player("ada"),
+        ada: { ...player("ada"), score: 450, correctCount: 2 },
         grace: player("grace"),
       },
       progress: {
-        ada: createRaceProgress(),
+        ada: {
+          ...createRaceProgress(),
+          score: 450,
+          solvedCount: 2,
+          solved: { one: NOW - 2_000, two: NOW - 1_000 },
+        },
         grace: createRaceProgress(),
       },
     };
@@ -249,8 +254,24 @@ describe("competitive room lifecycle", () => {
     const oneLeft = moveRacePlayerToSpectators(room, "ada", NOW)!;
     expect(oneLeft.meta.status).toBe("active");
     expect(Object.keys(oneLeft.leaderboard ?? {})).toEqual(["grace"]);
-    expect(oneLeft.progress).not.toHaveProperty("ada");
+    expect(oneLeft.progress?.ada).toMatchObject({
+      score: 450,
+      solvedCount: 2,
+      solved: { one: NOW - 2_000, two: NOW - 1_000 },
+    });
     expect(oneLeft.spectators?.ada.nickname).toBe("ada");
+
+    const restored = moveRaceSpectatorToPlayers(oneLeft, "ada")!;
+    expect(restored.leaderboard?.ada).toMatchObject({
+      score: 450,
+      correctCount: 2,
+      ready: false,
+    });
+    expect(restored.progress?.ada).toMatchObject({
+      score: 450,
+      solvedCount: 2,
+      solved: { one: NOW - 2_000, two: NOW - 1_000 },
+    });
 
     const noneLeft = moveRacePlayerToSpectators(oneLeft, "grace", NOW + 1)!;
     expect(noneLeft.meta.status).toBe("finished");
@@ -339,14 +360,15 @@ describe("competitive room lifecycle", () => {
       settleCurrentChallengeAwards(demotedFirst, challenge),
     ).toBeUndefined();
     expect(demotedFirst.challenge).toBeUndefined();
-    expect(demotedFirst.progress).not.toHaveProperty("grace");
+    expect(demotedFirst.progress?.grace).toMatchObject({ score: 500 });
     expect(demotedFirst.leaderboard).not.toHaveProperty("grace");
 
     const promotedAgain = moveRaceSpectatorToPlayers(
       demotedFirst,
       "grace",
     )!;
-    expect(promotedAgain.progress?.grace).toEqual(createRaceProgress());
+    expect(promotedAgain.progress?.grace).toMatchObject({ score: 500 });
+    expect(promotedAgain.leaderboard?.grace.score).toBe(500);
     expect(
       settleCurrentChallengeAwards(promotedAgain, challenge),
     ).toBeUndefined();
@@ -354,10 +376,10 @@ describe("competitive room lifecycle", () => {
       score: 1_250,
       challengeAwards: { duel: 1_000 },
     });
-    expect(promotedAgain.progress?.grace).toEqual(createRaceProgress());
+    expect(promotedAgain.progress?.grace).toMatchObject({ score: 500 });
   });
 
-  it("promotes only a current spectator with a fresh progress record", () => {
+  it("gives spectators without preserved progress a fresh progress record", () => {
     const spectator = {
       uid: "ada",
       nickname: "Ada",
@@ -580,6 +602,17 @@ describe("competitive room lifecycle", () => {
       progress: {
         ada: { ...createRaceProgress(), score: 250 },
         grace: { ...createRaceProgress(), score: 500 },
+        spectator: { ...createRaceProgress(), score: 900 },
+      },
+      spectators: {
+        spectator: {
+          uid: "spectator",
+          nickname: "Spectator",
+          normalizedNickname: "spectator",
+          joinedAt: NOW - 1_000,
+          assignedAt: NOW - 500,
+          online: true,
+        },
       },
     };
 
@@ -589,6 +622,7 @@ describe("competitive room lifecycle", () => {
     expect(rematched.challenge).toBeUndefined();
     expect(rematched.progress?.ada).toEqual(createRaceProgress());
     expect(rematched.progress?.grace).toEqual(createRaceProgress());
+    expect(rematched.progress).not.toHaveProperty("spectator");
     expect(rematched.leaderboard?.ada.score).toBe(0);
     expect(rematched.leaderboard?.grace.score).toBe(0);
   });
