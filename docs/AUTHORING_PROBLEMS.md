@@ -14,7 +14,7 @@ Edit `easy.ts`, `medium.ts`, or `hard.ts` in the new version folder. Each proble
 - runnable starter and solution code; standard-library imports are allowed for module-focused problems;
 - at least three distinct stdin/stdout test cases.
 
-Keep the statement short: one sentence for the task, precise input and output rules, and one example. Do not restate those sections in prose. The app adds a brief `Why this works` note based on the reference solution's main technique; it should explain the invariant or mathematical reason, never merely repeat the example input and output.
+Keep the statement short: one sentence for the task, precise input and output rules, and one example. The app adds a brief `Example explained` note that connects the example's actual input to its output. Prefer a substituted formula or a short walkthrough that shows the key decision or transformation; do not merely repeat the two values.
 
 For introductory problems, scaffold only concepts the student has already met. Prefer named intermediate variables and explicit `if`, `for`, and conversion steps over nested calls, ternary expressions, comprehensions, `map`, unpacking tricks, or dense formatting. Reference solutions are teaching material: the shortest solution is not automatically the clearest one.
 

@@ -3,6 +3,7 @@ import { DIFFICULTIES, DIFFICULTY_CONFIG } from "./difficulty";
 import { loadProblemBank } from "./problemBank";
 import {
   BONUS_RANGES,
+  explainExample,
   explainSolution,
   getProblemReward,
   scoreProblemComplexity,
@@ -44,20 +45,53 @@ describe("problem progression and bonuses", () => {
     expect(getProblemReward(problem)).toBe(DIFFICULTY_CONFIG.hard.points + 200);
   });
 
-  it("keeps statements concise and adds a reason instead of narrating the sample", async () => {
+  it("keeps statements concise and explains how each sample reaches its output", async () => {
     for (const version of ["v1", "v2", "v3", "v4", "v5"]) {
       const bank = await loadProblemBank(version);
       for (const problem of bank.problems) {
         expect(problem.description).not.toContain("## What your program needs to do");
-        expect(problem.description).not.toContain("### Example explained");
-        expect(problem.description).toContain("### Why this works");
+        expect(problem.description).not.toContain("### Why this works");
+        expect(problem.description).toContain("### Example explained");
         expect(problem.description.indexOf("\n### Example\n")).toBeLessThan(
-          problem.description.indexOf("\n### Why this works\n"),
+          problem.description.indexOf("\n### Example explained\n"),
         );
-        expect(explainSolution(problem).split(/\s+/).length).toBeGreaterThan(8);
-        expect(explainSolution(problem).split(/\s+/).length).toBeLessThanOrEqual(55);
+        expect(explainExample(problem).split(/\s+/).length).toBeGreaterThan(8);
+        expect(explainExample(problem).split(/\s+/).length).toBeLessThanOrEqual(85);
+        expect(explainExample(problem)).not.toMatch(/undefined|NaN/);
       }
     }
+  });
+
+  it("substitutes the Fahrenheit sample into the conversion formula", async () => {
+    const problem = (await loadProblemBank("v5")).problems.find(
+      (item) => item.id === "v5-fahrenheit-workshop",
+    )!;
+    const explanation = explainExample(problem);
+
+    expect(explanation).toContain("(32°F - 32) × 5/9 = 0°C");
+    expect(explanation).toContain("output is `0.0`");
+  });
+
+  it("connects representative numeric, conditional, and text samples to their outputs", async () => {
+    const problems = (await loadProblemBank("v5")).problems;
+    const explanationFor = (id: string) =>
+      explainExample(problems.find((item) => item.id === id)!);
+
+    expect(explanationFor("v5-solar-panel-energy")).toContain("4 × 250 × 5 = 5000");
+    expect(explanationFor("v5-freezer-safe-zone")).toContain("-20 <= -21 <= -10");
+    expect(explanationFor("v5-freezer-safe-zone")).toContain("is false");
+    expect(explanationFor("v5-rocket-radio-check")).toContain(
+      "Adding `: radio ready.` after it",
+    );
+  });
+
+  it("uses the authored example even when it is not the first test case", async () => {
+    const problem = (await loadProblemBank("v1")).problems.find(
+      (item) => item.id === "fibonacci-term",
+    )!;
+
+    expect(explainExample(problem)).toContain("`7`");
+    expect(explainExample(problem)).toContain("`8`");
   });
 
   it("explains the actual reason behind representative techniques", async () => {
