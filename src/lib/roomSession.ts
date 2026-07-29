@@ -2,6 +2,7 @@ import type { CollaborationRoomSession } from "../types/collaboration";
 import type { RoomSession } from "../types/multiplayer";
 
 export const ACTIVE_ROOM_SESSION_KEY = "col.multiplayer-session.v1";
+export const RESUMABLE_RACE_ROOMS_KEY = "col.resumable-race-rooms.v1";
 export const LEGACY_RACE_SESSION_KEY = "col.multiplayer-session.v0";
 export const LEGACY_PYCLIMB_SESSION_KEY = "pyclimb.multiplayer-session.v0";
 
@@ -10,6 +11,9 @@ const SESSION_EVENT = "col:active-room-session";
 export type RaceActiveRoomSession = RoomSession & { kind: "race" };
 export type ActiveRoomSession = RaceActiveRoomSession | CollaborationRoomSession;
 export type ActiveSession = ActiveRoomSession;
+export type ResumableRaceRoom = RoomSession & { leftAt: number };
+
+const MAX_RESUMABLE_RACE_ROOMS = 8;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -36,6 +40,13 @@ function parseRaceSession(value: unknown): RaceActiveRoomSession | null {
     role: value.role,
     ...(typeof value.nickname === "string" ? { nickname: value.nickname } : {}),
   };
+}
+
+function parseResumableRaceRoom(value: unknown): ResumableRaceRoom | null {
+  const session = parseRaceSession(value);
+  if (!session || !isRecord(value) || typeof value.leftAt !== "number") return null;
+  const { kind: _kind, ...roomSession } = session;
+  return { ...roomSession, leftAt: value.leftAt };
 }
 
 function parseCollaborationSession(value: unknown): CollaborationRoomSession | null {
@@ -125,6 +136,50 @@ export function writeRaceRoomSession(
   storage: Storage = window.localStorage,
 ): void {
   writeActiveRoomSession({ kind: "race", ...session }, storage);
+}
+
+export function readResumableRaceRooms(
+  storage: Storage = window.localStorage,
+): ResumableRaceRoom[] {
+  try {
+    const value = parseStoredValue(storage.getItem(RESUMABLE_RACE_ROOMS_KEY));
+    if (!Array.isArray(value)) return [];
+    return value
+      .map(parseResumableRaceRoom)
+      .filter((room): room is ResumableRaceRoom => room !== null)
+      .sort((left, right) => right.leftAt - left.leftAt)
+      .slice(0, MAX_RESUMABLE_RACE_ROOMS);
+  } catch {
+    return [];
+  }
+}
+
+export function rememberResumableRaceRoom(
+  session: RoomSession,
+  storage: Storage = window.localStorage,
+  leftAt = Date.now(),
+): ResumableRaceRoom[] {
+  const next = [
+    { ...session, leftAt },
+    ...readResumableRaceRooms(storage).filter(
+      (room) => room.code !== session.code || room.uid !== session.uid,
+    ),
+  ].slice(0, MAX_RESUMABLE_RACE_ROOMS);
+  storage.setItem(RESUMABLE_RACE_ROOMS_KEY, JSON.stringify(next));
+  return next;
+}
+
+export function forgetResumableRaceRoom(
+  code: string,
+  uid: string,
+  storage: Storage = window.localStorage,
+): ResumableRaceRoom[] {
+  const next = readResumableRaceRooms(storage).filter(
+    (room) => room.code !== code || room.uid !== uid,
+  );
+  if (next.length) storage.setItem(RESUMABLE_RACE_ROOMS_KEY, JSON.stringify(next));
+  else storage.removeItem(RESUMABLE_RACE_ROOMS_KEY);
+  return next;
 }
 
 export function clearActiveRoomSession(

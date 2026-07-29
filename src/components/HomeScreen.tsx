@@ -7,6 +7,7 @@ import {
   LogOut,
   Plus,
   Radio,
+  RotateCcw,
   UserRound,
   Users,
   X,
@@ -15,6 +16,7 @@ import { useEffect, useState } from "react";
 import { getDefaultTopicSelection, type CurriculumTopicId } from "../data/curriculum";
 import type { ProblemBank } from "../data/problemTypes";
 import { getFirebaseErrorMessage, type GoogleUserProfile } from "../lib/firebase";
+import type { ResumableRaceRoom } from "../lib/roomSession";
 import { BrandLogo } from "./BrandLogo";
 import { TopicSelector } from "./TopicSelector";
 
@@ -25,12 +27,14 @@ interface HomeScreenProps {
   collaborationError?: string | null;
   authUser: GoogleUserProfile | null;
   authLoading: boolean;
+  resumableRooms: ResumableRaceRoom[];
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   onProfile: () => void;
   onSolo: (topics: CurriculumTopicId[]) => void;
   onCreateRoom: (topics: CurriculumTopicId[]) => Promise<void>;
   onJoinRoom: (code: string, nickname: string) => Promise<void>;
+  onResumeRoom: (room: ResumableRaceRoom) => Promise<void>;
   onCreateCollaborationRoom: () => Promise<void>;
   onJoinCollaborationRoom: (code: string, nickname: string) => Promise<void>;
 }
@@ -42,12 +46,14 @@ export function HomeScreen({
   collaborationError,
   authUser,
   authLoading,
+  resumableRooms,
   onSignIn,
   onSignOut,
   onProfile,
   onSolo,
   onCreateRoom,
   onJoinRoom,
+  onResumeRoom,
   onCreateCollaborationRoom,
   onJoinCollaborationRoom,
 }: HomeScreenProps) {
@@ -56,13 +62,13 @@ export function HomeScreen({
   const [nickname, setNickname] = useState("");
   const [topics, setTopics] = useState<CurriculumTopicId[]>(getDefaultTopicSelection);
   const [busy, setBusy] = useState<
-    "auth" | "create" | "join" | "create-collaboration" | "join-collaboration" | null
+    "auth" | "create" | "join" | "resume" | "create-collaboration" | "join-collaboration" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [showUnlimitedSignIn, setShowUnlimitedSignIn] = useState(false);
 
   const perform = async (
-    kind: "create" | "join" | "create-collaboration" | "join-collaboration",
+    kind: "create" | "join" | "resume" | "create-collaboration" | "join-collaboration",
     action: () => Promise<void>,
   ) => {
     setBusy(kind);
@@ -149,6 +155,40 @@ export function HomeScreen({
             Practice, compete, or build Python together in a shared notebook.
           </p>
         </div>
+
+        {resumableRooms.length > 0 && (
+          <section className="panel mb-6 border-violet-400/25 bg-violet-400/5 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-black text-white">Your unlimited rooms</h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  Rejoin with your saved role, score, and progress.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {resumableRooms.map((room) => (
+                  <button
+                    key={`${room.code}:${room.uid}`}
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => perform("resume", () => onResumeRoom(room))}
+                    className="inline-flex items-center gap-2 rounded-xl border border-violet-400/30 bg-violet-400/10 px-4 py-2.5 text-sm font-black text-violet-100 hover:bg-violet-400/20 disabled:cursor-wait disabled:opacity-40"
+                  >
+                    {busy === "resume" ? (
+                      <LoaderCircle size={16} className="animate-spin" />
+                    ) : (
+                      <RotateCcw size={16} />
+                    )}
+                    Resume <span className="font-mono tracking-widest">{room.code}</span>
+                    <span className="text-[10px] uppercase text-violet-300/70">
+                      {room.role === "player" ? "contestant" : room.role}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         <TopicSelector bank={bank} selected={topics} onChange={setTopics} />
 

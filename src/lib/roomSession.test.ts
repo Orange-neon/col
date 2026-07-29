@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   ACTIVE_ROOM_SESSION_KEY,
+  RESUMABLE_RACE_ROOMS_KEY,
   LEGACY_PYCLIMB_SESSION_KEY,
   LEGACY_RACE_SESSION_KEY,
   clearActiveRoomSession,
+  forgetResumableRaceRoom,
   getCollaborationRoomSession,
   getRaceRoomSession,
   readActiveRoomSession,
+  readResumableRaceRooms,
+  rememberResumableRaceRoom,
   writeActiveRoomSession,
   writeRaceRoomSession,
 } from "./roomSession";
@@ -134,5 +138,71 @@ describe("active room sessions", () => {
       }),
     );
     expect(readActiveRoomSession(storage)).toBeNull();
+  });
+
+  it("remembers unlimited rooms for later without making them active", () => {
+    const storage = new MemoryStorage();
+    writeRaceRoomSession(
+      { code: "ABC234", uid: "player-1", role: "player", nickname: "Ada" },
+      storage,
+    );
+
+    rememberResumableRaceRoom(
+      { code: "ABC234", uid: "player-1", role: "player", nickname: "Ada" },
+      storage,
+      1_234,
+    );
+    clearActiveRoomSession("race", storage);
+
+    expect(readActiveRoomSession(storage)).toBeNull();
+    expect(readResumableRaceRooms(storage)).toEqual([
+      {
+        code: "ABC234",
+        uid: "player-1",
+        role: "player",
+        nickname: "Ada",
+        leftAt: 1_234,
+      },
+    ]);
+  });
+
+  it("keeps the latest room entry and forgets it after resuming", () => {
+    const storage = new MemoryStorage();
+    rememberResumableRaceRoom(
+      { code: "ABC234", uid: "player-1", role: "player", nickname: "Ada" },
+      storage,
+      1_000,
+    );
+    rememberResumableRaceRoom(
+      { code: "ABC234", uid: "player-1", role: "spectator", nickname: "Ada" },
+      storage,
+      2_000,
+    );
+
+    expect(readResumableRaceRooms(storage)).toHaveLength(1);
+    expect(readResumableRaceRooms(storage)[0]).toMatchObject({
+      code: "ABC234",
+      role: "spectator",
+      leftAt: 2_000,
+    });
+
+    expect(forgetResumableRaceRoom("ABC234", "player-1", storage)).toEqual([]);
+    expect(storage.getItem(RESUMABLE_RACE_ROOMS_KEY)).toBeNull();
+  });
+
+  it("ignores malformed resumable room entries", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      RESUMABLE_RACE_ROOMS_KEY,
+      JSON.stringify([
+        { code: "ABC234", uid: "host-1", role: "host", leftAt: 500 },
+        { code: 42, uid: "bad", role: "player", leftAt: 600 },
+        { code: "XYZ234", uid: "bad", role: "owner", leftAt: 700 },
+      ]),
+    );
+
+    expect(readResumableRaceRooms(storage)).toEqual([
+      { code: "ABC234", uid: "host-1", role: "host", leftAt: 500 },
+    ]);
   });
 });

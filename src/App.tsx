@@ -49,6 +49,7 @@ import {
 } from "./lib/problemHistory";
 import { finishRaceHistory, recordRaceProblem } from "./lib/raceHistory";
 import { formatCountdown, sortRoomPlayers } from "./lib/raceLogic";
+import type { ResumableRaceRoom } from "./lib/roomSession";
 import type { RaceActivity, RoomMeta, RoomSession } from "./types/multiplayer";
 import type { RaceController } from "./types/race";
 
@@ -126,6 +127,7 @@ interface GameShellProps {
   historyRaceId?: string;
   onReset?: () => void;
   onExit?: () => void;
+  exitLabel?: string;
 }
 
 function GameShell({
@@ -139,6 +141,7 @@ function GameShell({
   historyRaceId,
   onReset,
   onExit,
+  exitLabel,
 }: GameShellProps) {
   const [output, setOutput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -377,6 +380,7 @@ function GameShell({
         onSelectDifficulty={selectDifficulty}
         onReset={onReset}
         onExit={onExit}
+        exitLabel={exitLabel}
       />
 
       {race.activeProblem?.timedMode && timedSeconds !== null && (
@@ -616,6 +620,32 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
       }
     }
   };
+  const leaveForNow = async () => {
+    const confirmed = await confirm({
+      title: "Leave this unlimited room for now?",
+      message: `Room ${session.code} will stay open and all progress will remain saved. Sign in with the same Google account to resume it later.`,
+      confirmLabel: "Leave for now",
+      tone: "primary",
+    });
+    if (!confirmed) return;
+    try {
+      await room.leaveRoom();
+      notify({
+        tone: "success",
+        title: "Room saved for later",
+        message: `Resume room ${session.code} from the home screen whenever you're ready.`,
+      });
+    } catch (reason) {
+      notify({
+        tone: "warning",
+        title: "You left the room",
+        message:
+          reason instanceof Error
+            ? `Your browser saved the room for later, but the offline status could not be confirmed: ${reason.message}`
+            : "Your browser saved the room for later, but the offline status could not be confirmed.",
+      });
+    }
+  };
   const makeSpectator = async (uid: string) => {
     const player = room.players.find((item) => item.uid === uid);
     if (!player) throw new Error("That contestant is no longer in the race.");
@@ -692,7 +722,9 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
         }}
         onMakeSpectator={makeSpectator}
         onMakePlayer={makePlayer}
-        onLeave={() => void closeRoom()}
+        onLeave={() => void (meta.unlimited ? leaveForNow() : closeRoom())}
+        onClose={meta.unlimited ? () => void closeRoom() : undefined}
+        leaveLabel={meta.unlimited ? "Leave for now" : undefined}
       />
     );
   }
@@ -717,6 +749,8 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
             });
           });
         }}
+        onLeave={meta.unlimited ? () => void leaveForNow() : undefined}
+        leaveLabel="Leave for now"
         onClose={() => void closeRoom()}
       />
     );
@@ -737,6 +771,8 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
       onMakeSpectator={makeSpectator}
       onMakePlayer={makePlayer}
       onStop={() => void room.finishRace("host")}
+      onLeave={meta.unlimited ? () => void leaveForNow() : undefined}
+      leaveLabel="Leave for now"
     />
   );
 }
@@ -744,10 +780,37 @@ function HostRoom({ bank, room, session }: RoomPageProps) {
 function PlayerRoom({ bank, room, session }: RoomPageProps) {
   const python = usePyodide();
   const meta = room.meta!;
+  const { confirm, notify } = useFeedback();
   const expire = useCallback(() => room.finishRace("time"), [room.finishRace]);
   const countdown = useCountdown(meta, room.serverNow, expire);
   const timeRemaining = meta.unlimited ? "Unlimited" : countdown;
   const historyRaceId = `room:${session.code}:${session.uid}:${meta.startedAt ?? meta.createdAt}`;
+  const leaveForNow = async () => {
+    const confirmed = await confirm({
+      title: "Leave this unlimited room for now?",
+      message: `Your role, score, and solved problems in room ${session.code} will remain saved. Sign in with the same Google account to resume later.`,
+      confirmLabel: "Leave for now",
+      tone: "primary",
+    });
+    if (!confirmed) return;
+    try {
+      await room.leaveRoom();
+      notify({
+        tone: "success",
+        title: "Progress saved",
+        message: `Resume room ${session.code} from the home screen whenever you're ready.`,
+      });
+    } catch (reason) {
+      notify({
+        tone: "warning",
+        title: "You left the room",
+        message:
+          reason instanceof Error
+            ? `Your browser saved the room for later, but the offline status could not be confirmed: ${reason.message}`
+            : "Your browser saved the room for later, but the offline status could not be confirmed.",
+      });
+    }
+  };
 
   useEffect(() => {
     if (meta.status !== "finished") return;
@@ -786,7 +849,8 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
         unlimited={Boolean(meta.unlimited)}
         pythonStatus={python.status}
         onRetryPython={python.retry}
-        onLeave={() => void room.leaveRoom()}
+        onLeave={() => void (meta.unlimited ? leaveForNow() : room.leaveRoom())}
+        leaveLabel={meta.unlimited ? "Leave for now" : undefined}
       />
     );
   }
@@ -798,7 +862,8 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
         code={session.code}
         players={room.players}
         endReason={meta.endReason}
-        onLeave={() => void room.leaveRoom()}
+        onLeave={() => void (meta.unlimited ? leaveForNow() : room.leaveRoom())}
+        leaveLabel={meta.unlimited ? "Leave for now" : undefined}
       />
     );
   }
@@ -811,6 +876,7 @@ function PlayerRoom({ bank, room, session }: RoomPageProps) {
       python={python}
       timeRemaining={timeRemaining}
       historyRaceId={historyRaceId}
+      onLeave={meta.unlimited ? leaveForNow : undefined}
     />
   );
 }
@@ -831,6 +897,7 @@ function SpectatorRoom({ bank, room, session }: RoomPageProps) {
         durationSeconds={meta.durationSeconds}
         unlimited={Boolean(meta.unlimited)}
         onLeave={() => void room.leaveRoom()}
+        leaveLabel={meta.unlimited ? "Leave for now" : undefined}
       />
     );
   }
@@ -843,6 +910,7 @@ function SpectatorRoom({ bank, room, session }: RoomPageProps) {
         players={room.players}
         endReason={meta.endReason}
         onLeave={() => void room.leaveRoom()}
+        leaveLabel={meta.unlimited ? "Leave for now" : undefined}
       />
     );
   }
@@ -860,6 +928,7 @@ function SpectatorRoom({ bank, room, session }: RoomPageProps) {
       spectators={room.spectators}
       canManage={false}
       onLeave={() => void room.leaveRoom()}
+      leaveLabel={meta.unlimited ? "Leave for now" : undefined}
     />
   );
 }
@@ -871,7 +940,13 @@ function ActivePlayerGame({
   python,
   timeRemaining,
   historyRaceId,
-}: RoomPageProps & { python: PythonController; timeRemaining: string; historyRaceId: string }) {
+  onLeave,
+}: RoomPageProps & {
+  python: PythonController;
+  timeRemaining: string;
+  historyRaceId: string;
+  onLeave?: () => void | Promise<void>;
+}) {
   const race = useMultiplayerRace({
     bank,
     session,
@@ -946,6 +1021,8 @@ function ActivePlayerGame({
       roomCode={session.code}
       timeRemaining={timeRemaining}
       historyRaceId={historyRaceId}
+      onExit={onLeave ? () => void onLeave() : undefined}
+      exitLabel="Leave for now"
     />
   );
 }
@@ -1041,6 +1118,11 @@ function LoadedApp({ bank }: { bank: ProblemBank }) {
         collaborationError={collaboration.error}
         authUser={homeAuthUser}
         authLoading={room.authLoading || collaboration.authLoading}
+        resumableRooms={
+          homeAuthUser
+            ? room.resumableRooms.filter((item) => item.uid === homeAuthUser.uid)
+            : []
+        }
         onSignIn={room.signIn}
         onSignOut={room.signOut}
         onProfile={() => setShowProfile(true)}
@@ -1050,6 +1132,12 @@ function LoadedApp({ bank }: { bank: ProblemBank }) {
         }}
         onJoinRoom={async (code, nickname) => {
           await room.joinRoom(code, nickname);
+        }}
+        onResumeRoom={async (savedRoom: ResumableRaceRoom) => {
+          await room.joinRoom(
+            savedRoom.code,
+            savedRoom.nickname ?? homeAuthUser?.displayName.slice(0, 20) ?? "Host",
+          );
         }}
         onCreateCollaborationRoom={async () => {
           if (!homeAuthUser) await collaboration.signIn();

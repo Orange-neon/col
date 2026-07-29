@@ -36,6 +36,7 @@ interface HostDashboardProps {
   onMakePlayer?: (uid: string) => void | Promise<void>;
   onStop?: () => void;
   onLeave?: () => void;
+  leaveLabel?: string;
 }
 
 export function HostDashboard({
@@ -53,6 +54,7 @@ export function HostDashboard({
   onMakePlayer,
   onStop,
   onLeave,
+  leaveLabel = "Leave room",
 }: HostDashboardProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [promotingUid, setPromotingUid] = useState<string | null>(null);
@@ -136,7 +138,7 @@ export function HostDashboard({
                 onClick={onLeave}
                 className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-3 text-sm font-bold text-slate-400 hover:border-rose-400/30 hover:text-rose-200"
               >
-                <LogOut size={15} /> Leave room
+                <LogOut size={15} /> {leaveLabel}
               </button>
             )}
           </div>

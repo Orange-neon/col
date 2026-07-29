@@ -13,6 +13,7 @@ interface NavbarProps {
   onSelectDifficulty: (difficulty: Difficulty) => void;
   onReset?: () => void;
   onExit?: () => void;
+  exitLabel?: string;
 }
 
 const difficultyStyles: Record<Difficulty, string> = {
@@ -31,6 +32,7 @@ export function Navbar({
   onSelectDifficulty,
   onReset,
   onExit,
+  exitLabel = "Quit practice",
 }: NavbarProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#070b16]/90 backdrop-blur-xl">
@@ -115,12 +117,13 @@ export function Navbar({
           {onExit && (
             <button
               type="button"
-              title="Quit practice"
-              aria-label="Quit practice"
+              title={exitLabel}
+              aria-label={exitLabel}
               onClick={onExit}
-              className="grid size-10 place-items-center rounded-xl border border-slate-700/70 bg-slate-900/80 text-slate-400 transition hover:border-slate-600 hover:text-white"
+              className="flex h-10 items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 text-sm font-bold text-slate-400 transition hover:border-slate-600 hover:text-white"
             >
               <LogOut size={17} />
+              <span>{exitLabel}</span>
             </button>
           )}
         </div>

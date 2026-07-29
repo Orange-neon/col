@@ -23,8 +23,11 @@ import { CHALLENGER_WIN_PRIZE } from "../lib/challengeLogic";
 import { generateRoomCode, isRoomCode, normalizeRoomCode } from "../lib/roomCode";
 import {
   clearActiveRoomSession,
+  forgetResumableRaceRoom,
   getRaceRoomSession,
   readActiveRoomSession,
+  readResumableRaceRooms,
+  rememberResumableRaceRoom,
   subscribeActiveRoomSession,
   writeRaceRoomSession,
 } from "../lib/roomSession";
@@ -88,6 +91,7 @@ async function runLoadedRoomTransaction<T>(
 
 export function useRaceRoom(bank: ProblemBank) {
   const [session, setSessionState] = useState<RoomSession | null>(readSession);
+  const [resumableRooms, setResumableRooms] = useState(readResumableRaceRooms);
   const [authUser, setAuthUser] = useState<GoogleUserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(isFirebaseConfigured);
   const [meta, setMeta] = useState<RoomMeta | null>(null);
@@ -122,6 +126,14 @@ export function useRaceRoom(bank: ProblemBank) {
     if (next) writeRaceRoomSession(next);
     else clearActiveRoomSession("race");
   }, []);
+
+  const activateSession = useCallback(
+    (next: RoomSession) => {
+      setResumableRooms(forgetResumableRaceRoom(next.code, next.uid));
+      saveSession(next);
+    },
+    [saveSession],
+  );
 
   useEffect(
     () =>
@@ -639,7 +651,7 @@ export function useRaceRoom(bank: ProblemBank) {
       const existingSpectators = Object.values(room.spectators ?? {});
       if (room.meta.hostUid === user.uid) {
         const next = { code, uid: user.uid, role: "host" as const };
-        saveSession(next);
+        activateSession(next);
         return next;
       }
       const returningSpectator = room.spectators?.[user.uid];
@@ -651,7 +663,7 @@ export function useRaceRoom(bank: ProblemBank) {
           role: "spectator" as const,
           nickname: returningSpectator.nickname,
         };
-        saveSession(next);
+        activateSession(next);
         return next;
       }
       const returningPlayer = room.leaderboard?.[user.uid];
@@ -663,7 +675,7 @@ export function useRaceRoom(bank: ProblemBank) {
           role: "player" as const,
           nickname: returningPlayer.nickname,
         };
-        saveSession(next);
+        activateSession(next);
         return next;
       }
       if (room.meta.status === "finished") {
@@ -703,7 +715,7 @@ export function useRaceRoom(bank: ProblemBank) {
         [`progress/${user.uid}`]: createRaceProgress(),
       });
       const next = { code, uid: user.uid, role: "player" as const, nickname };
-      saveSession(next);
+      activateSession(next);
       await set(
         push(ref(database, `rooms/${code}/events`)),
         {
@@ -715,7 +727,7 @@ export function useRaceRoom(bank: ProblemBank) {
       ).catch(() => undefined);
       return next;
     },
-    [bank.version, saveSession],
+    [activateSession, bank.version],
   );
 
   const setReady = useCallback(
@@ -1341,40 +1353,66 @@ export function useRaceRoom(bank: ProblemBank) {
 
   const leaveRoom = useCallback(async () => {
     const current = session;
-    saveSession(null);
-    setMeta(null);
-    setPlayers([]);
-    setSpectators([]);
-    setActivities({});
-    setAcceptedSubmissions({});
-    setActivityError(null);
-    setProgress(createRaceProgress());
-    setProgressLoaded(false);
-    setEvents([]);
-    setChallenge(null);
-    setChallengeLoadedFor(null);
-    if (!current || !isFirebaseConfigured) return;
-    const { database, db } = await getFirebaseContext();
-    const { ref, remove, set } = db;
-    if (current.role === "player") {
-      if (meta?.status === "active" && meta.createdAt) {
+    const currentMeta = meta;
+    const preserveMembership = Boolean(currentMeta?.unlimited);
+    const finishLocalLeave = () => {
+      if (current && preserveMembership) {
+        setResumableRooms(rememberResumableRaceRoom(current));
+      }
+      saveSession(null);
+      setMeta(null);
+      setPlayers([]);
+      setSpectators([]);
+      setActivities({});
+      setAcceptedSubmissions({});
+      setActivityError(null);
+      setProgress(createRaceProgress());
+      setProgressLoaded(false);
+      setEvents([]);
+      setChallenge(null);
+      setChallengeLoadedFor(null);
+    };
+    if (!current || !isFirebaseConfigured) {
+      finishLocalLeave();
+      return;
+    }
+    try {
+      const { database, db } = await getFirebaseContext({
+        requireGoogle: preserveMembership,
+      });
+      const { ref, remove, set } = db;
+      if (current.role === "host") {
+        await set(ref(database, `rooms/${current.code}/meta/hostOnline`), false);
+      } else if (current.role === "player") {
+        if (currentMeta?.status === "active" && currentMeta.createdAt) {
+          await remove(
+            ref(
+              database,
+              `raceActivity/${current.code}/${currentMeta.createdAt}/${current.uid}`,
+            ),
+          ).catch(() => undefined);
+        }
+        if (currentMeta?.status === "lobby" && !preserveMembership) {
+          await remove(ref(database, `rooms/${current.code}/leaderboard/${current.uid}`));
+          await remove(ref(database, `rooms/${current.code}/progress/${current.uid}`));
+        } else {
+          await set(
+            ref(database, `rooms/${current.code}/leaderboard/${current.uid}/online`),
+            false,
+          );
+        }
+      } else if (preserveMembership) {
+        await set(
+          ref(database, `rooms/${current.code}/spectators/${current.uid}/online`),
+          false,
+        );
+      } else {
         await remove(
-          ref(
-            database,
-            `raceActivity/${current.code}/${meta.createdAt}/${current.uid}`,
-          ),
+          ref(database, `rooms/${current.code}/spectators/${current.uid}`),
         ).catch(() => undefined);
       }
-      if (meta?.status === "lobby") {
-        await remove(ref(database, `rooms/${current.code}/leaderboard/${current.uid}`));
-        await remove(ref(database, `rooms/${current.code}/progress/${current.uid}`));
-      } else {
-        await set(ref(database, `rooms/${current.code}/leaderboard/${current.uid}/online`), false);
-      }
-    } else if (current.role === "spectator") {
-      await remove(
-        ref(database, `rooms/${current.code}/spectators/${current.uid}`),
-      ).catch(() => undefined);
+    } finally {
+      finishLocalLeave();
     }
   }, [meta, saveSession, session]);
 
@@ -1419,6 +1457,7 @@ export function useRaceRoom(bank: ProblemBank) {
     signOut,
     connected,
     session,
+    resumableRooms,
     meta,
     players: sortedPlayers,
     spectators,

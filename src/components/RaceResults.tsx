@@ -11,6 +11,7 @@ interface RaceResultsProps {
   onRematch?: () => void;
   onClose?: () => void;
   onLeave?: () => void;
+  leaveLabel?: string;
 }
 
 export function RaceResults({
@@ -22,6 +23,7 @@ export function RaceResults({
   onRematch,
   onClose,
   onLeave,
+  leaveLabel = "Leave room",
 }: RaceResultsProps) {
   const reason = endReason === "completed" ? "A climber cleared the whole bank!" : endReason === "host" ? "The host stopped the race." : "Time is up!";
   const standings = sortRoomPlayers(players);
@@ -53,10 +55,11 @@ export function RaceResults({
           {role === "host" ? (
             <>
               <button type="button" disabled={challengeSettlementPending} onClick={onRematch} className="flex items-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-wait disabled:opacity-50"><RotateCcw size={16} /> {challengeSettlementPending ? "Saving result…" : "Rematch"}</button>
+              {onLeave && <button type="button" disabled={challengeSettlementPending} onClick={onLeave} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 disabled:cursor-wait disabled:opacity-50"><LogOut size={16} /> {leaveLabel}</button>}
               <button type="button" disabled={challengeSettlementPending} onClick={onClose} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-rose-300 disabled:cursor-wait disabled:opacity-50"><DoorClosed size={16} /> {challengeSettlementPending ? "Waiting to close…" : "Close room"}</button>
             </>
           ) : (
-            <button type="button" onClick={onLeave} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300"><LogOut size={16} /> Leave room</button>
+            <button type="button" onClick={onLeave} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300"><LogOut size={16} /> {leaveLabel}</button>
           )}
         </div>
       </div>

@@ -409,6 +409,46 @@ describe("competitive race Realtime Database rules", () => {
     await assertSucceeds(googleDatabase("player").ref(ROOM_PATH).update(updates));
   });
 
+  it("lets unlimited room members go offline without deleting roles or progress", async () => {
+    const savedProgress = {
+      ...progress(4),
+      score: 725,
+      solvedCount: 2,
+      solved: { "v5-one": CREATED_AT + 100, "v5-two": CREATED_AT + 200 },
+    };
+    const unlimitedRoom = room({ unlimited: true, includeSpectator: true });
+    unlimitedRoom.progress.player = savedProgress;
+    unlimitedRoom.leaderboard.player.score = savedProgress.score;
+    unlimitedRoom.leaderboard.player.correctCount = savedProgress.solvedCount;
+    await seedRoom(unlimitedRoom);
+
+    await assertSucceeds(
+      googleDatabase("player").ref(`${ROOM_PATH}/leaderboard/player/online`).set(false),
+    );
+    await assertSucceeds(
+      googleDatabase("spectator").ref(`${ROOM_PATH}/spectators/spectator/online`).set(false),
+    );
+    await assertSucceeds(
+      googleDatabase("host").ref(`${ROOM_PATH}/meta/hostOnline`).set(false),
+    );
+
+    const savedRoom = await assertSucceeds(
+      googleDatabase("host").ref(ROOM_PATH).once("value"),
+    );
+    expect(savedRoom.child("leaderboard/player/online").val()).toBe(false);
+    expect(savedRoom.child("spectators/spectator/online").val()).toBe(false);
+    expect(savedRoom.child("meta/hostOnline").val()).toBe(false);
+    expect(savedRoom.child("progress/player").val()).toEqual(savedProgress);
+
+    await assertSucceeds(
+      googleDatabase("player").ref(`${ROOM_PATH}/leaderboard/player/online`).set(true),
+    );
+    const resumedProgress = await assertSucceeds(
+      googleDatabase("player").ref(`${ROOM_PATH}/progress/player`).once("value"),
+    );
+    expect(resumedProgress.val()).toEqual(savedProgress);
+  });
+
   it("lets only the host assign spectators while spectators can only change online state", async () => {
     await seedRoom();
     const host = anonymousDatabase("host");

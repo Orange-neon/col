@@ -57,4 +57,22 @@ describe("race results", () => {
     expect(html).toContain("Waiting to close…");
     expect(html.match(/disabled=\"\"/g)).toHaveLength(2);
   });
+
+  it("lets an unlimited host leave for later without replacing close room", () => {
+    const html = renderToStaticMarkup(
+      <RaceResults
+        role="host"
+        code="ABC234"
+        players={[player("uid-z", "Race winner", 900)]}
+        endReason="host"
+        onRematch={() => undefined}
+        onLeave={() => undefined}
+        leaveLabel="Leave for now"
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain("Leave for now");
+    expect(html).toContain("Close room");
+  });
 });

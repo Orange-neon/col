@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
+  DoorClosed,
   Eye,
   Infinity as InfinityIcon,
   LoaderCircle,
@@ -31,6 +32,8 @@ interface RoomLobbyProps {
   onMakeSpectator?: (uid: string) => void | Promise<void>;
   onMakePlayer?: (uid: string) => void | Promise<void>;
   onLeave: () => void;
+  onClose?: () => void;
+  leaveLabel?: string;
 }
 
 export function RoomLobby({
@@ -48,6 +51,8 @@ export function RoomLobby({
   onMakeSpectator,
   onMakePlayer,
   onLeave,
+  onClose,
+  leaveLabel,
 }: RoomLobbyProps) {
   const [assigningUid, setAssigningUid] = useState<string | null>(null);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
@@ -99,13 +104,24 @@ export function RoomLobby({
               </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onLeave}
-            className="flex items-center gap-2 text-sm text-slate-500 hover:text-rose-300"
-          >
-            <LogOut size={16} /> {role === "host" ? "Close room" : "Leave room"}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="flex items-center gap-2 text-sm text-slate-500 hover:text-rose-300"
+            >
+              <LogOut size={16} /> {leaveLabel ?? (role === "host" ? "Close room" : "Leave room")}
+            </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex items-center gap-2 text-sm text-rose-300/80 hover:text-rose-200"
+              >
+                <DoorClosed size={16} /> Close room
+              </button>
+            )}
+          </div>
         </header>
 
         <div className="grid gap-4 md:grid-cols-[1fr_18rem]">
