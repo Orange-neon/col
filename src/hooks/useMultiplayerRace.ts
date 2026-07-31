@@ -218,6 +218,9 @@ export function useMultiplayerRace({
       ) {
         throw new Error("The speed timer expired before the solution was submitted.");
       }
+      if (isChallenge) {
+        await recordAcceptedSubmission(problem, draft.editorCode);
+      }
       const points = isChallenge
         ? await recordChallengeSolve(problem)
         : await recordSolve(
@@ -229,9 +232,6 @@ export function useMultiplayerRace({
               : 1,
             draft.editorCode,
           );
-      if (isChallenge && points > 0) {
-        await recordAcceptedSubmission(problem, draft.editorCode).catch(() => undefined);
-      }
       setDraft(EMPTY_DRAFT);
       return points;
     },

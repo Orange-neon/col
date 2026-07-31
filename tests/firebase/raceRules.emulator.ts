@@ -119,6 +119,7 @@ function challenge(status: "waiting" | "active" | "finished" = "active") {
 function room(options: {
   status?: "lobby" | "active" | "finished";
   unlimited?: boolean;
+  startedAt?: number;
   includePlayer?: boolean;
   includeSpectator?: boolean;
   activeChallenge?: boolean;
@@ -145,7 +146,7 @@ function room(options: {
       durationSeconds: 1_800,
       unlimited: options.unlimited ?? false,
       createdAt: CREATED_AT,
-      startedAt: status === "lobby" ? null : CREATED_AT,
+      startedAt: status === "lobby" ? null : options.startedAt ?? CREATED_AT,
       endsAt: status === "active" ? Date.now() - 1_000 : null,
       endedAt: status === "finished" ? CREATED_AT + 10_000 : null,
       endReason: status === "finished" ? "host" : null,
@@ -327,6 +328,27 @@ describe("competitive race Realtime Database rules", () => {
     await assertSucceeds(googleTarget.set(submission()));
     await assertFails(anonymousDatabase("spectator").ref(SUBMISSION_PATH).once("value"));
     await assertSucceeds(googleDatabase("spectator").ref(SUBMISSION_PATH).once("value"));
+  });
+
+  it("accepts a server-timestamped submission when a live room has a future start timestamp", async () => {
+    const futureStartedAt = Date.now() + 60_000;
+    await seedRoom(
+      room({
+        unlimited: true,
+        startedAt: futureStartedAt,
+      }),
+    );
+    const target = googleDatabase("player").ref(
+      `raceSubmissions/${ROOM_CODE}/${futureStartedAt}/player/v5-example`,
+    );
+
+    await assertSucceeds(
+      target.set({
+        problemId: "v5-example",
+        source: "print('accepted')",
+        acceptedAt: { ".sv": "timestamp" },
+      }),
+    );
   });
 
   it("blocks accepted submissions outside an active race and lets the host clear history", async () => {

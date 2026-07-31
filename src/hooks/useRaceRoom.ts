@@ -785,7 +785,6 @@ export function useRaceRoom(bank: ProblemBank) {
       const { database, db } = await getFirebaseContext({
         requireGoogle: Boolean(meta.unlimited),
       });
-      const acceptedAt = Date.now() + serverOffsetRef.current;
       const submissionRef = db.ref(
         database,
         `raceSubmissions/${session.code}/${meta.startedAt}/${session.uid}/${problem.id}`,
@@ -797,7 +796,7 @@ export function useRaceRoom(bank: ProblemBank) {
             ? {
                 problemId: problem.id,
                 source: source.slice(0, 50_000),
-                acceptedAt,
+                acceptedAt: db.serverTimestamp(),
               }
             : undefined,
         { applyLocally: false },
@@ -1068,6 +1067,7 @@ export function useRaceRoom(bank: ProblemBank) {
       const progressRef = ref(database, `rooms/${session.code}/progress/${session.uid}`);
       const points = getProblemReward(problem) * (multiplier === DOUBLE_MULTIPLIER ? DOUBLE_MULTIPLIER : 1);
       const now = Date.now() + serverOffsetRef.current;
+      await recordAcceptedSubmission(problem, source);
       const result = await runTransaction(
         progressRef,
         (current: PlayerProgress | null) =>
@@ -1087,7 +1087,6 @@ export function useRaceRoom(bank: ProblemBank) {
         `${session.nickname} solved ${problem.title} (+${points})`,
         "good",
       ).catch(() => undefined);
-      await recordAcceptedSubmission(problem, source).catch(() => undefined);
       await activateWaitingChallenge(now).catch(() => undefined);
       if (!meta.unlimited && next.solvedCount >= meta.problemCount) {
         await finishRace("completed").catch(() => undefined);

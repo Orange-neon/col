@@ -186,6 +186,8 @@ describe("Realtime Database rule shape", () => {
     expect(validation).toContain("source");
     expect(validation).toContain("length <= 50000");
     expect(validation).toContain("acceptedAt");
+    expect(validation).toContain("acceptedAt').val() >= 0");
+    expect(validation).toContain("meta/startedAt').val() > now + 5000");
     expect(((submission.$other as RuleNode)[".validate"])).toBe(false);
   });
 
