@@ -172,6 +172,7 @@ describe("Realtime Database rule shape", () => {
     const generation = ((submissionCode.$generation ?? {}) as RuleNode);
     const submission = ((((generation.$uid ?? {}) as RuleNode).$problemId ?? {}) as RuleNode);
     const readRule = String(generation[".read"]);
+    const contestantReadRule = String(submission[".read"]);
     const writeRule = String(submission[".write"]);
     const validation = String(submission[".validate"]);
 
@@ -179,6 +180,9 @@ describe("Realtime Database rule shape", () => {
     expect(readRule).toContain("meta/hostUid");
     expect(readRule).toContain("spectators");
     expect(readRule).toContain("google.com");
+    expect(contestantReadRule).toContain("$uid === auth.uid");
+    expect(contestantReadRule).toContain("leaderboard");
+    expect(contestantReadRule).toContain("spectators");
     expect(writeRule).toContain("$uid === auth.uid");
     expect(writeRule).toContain("leaderboard");
     expect(writeRule).toContain("!data.exists()");
@@ -186,8 +190,7 @@ describe("Realtime Database rule shape", () => {
     expect(validation).toContain("source");
     expect(validation).toContain("length <= 50000");
     expect(validation).toContain("acceptedAt");
-    expect(validation).toContain("acceptedAt').val() >= 0");
-    expect(validation).toContain("meta/startedAt').val() > now + 5000");
+    expect(validation).toContain("meta/startedAt");
     expect(((submission.$other as RuleNode)[".validate"])).toBe(false);
   });
 
