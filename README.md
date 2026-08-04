@@ -15,11 +15,17 @@ To run the collaboration relay locally in a second terminal after configuring it
 npm.cmd run collaboration:dev
 ```
 
-The production site is built for the `/col/` GitHub Pages path:
+The default production build targets the `/col/` GitHub Pages path:
 
 ```powershell
 npm.cmd run build
 npm.cmd run preview
+```
+
+Firebase Hosting uses a separate root-path build so both hosts can coexist:
+
+```powershell
+npm.cmd run build:firebase
 ```
 
 ## Enable rooms
@@ -73,6 +79,31 @@ Free-tier capacity is intentionally bounded: 30 live participants per room, 50 c
 5. Add `<your-github-name>.github.io` under Firebase Authentication → Settings → Authorized domains.
 
 The workflow runs problem validation, unit tests, TypeScript, and the production build before deploying `dist`.
+
+## Deploy to Firebase Hosting
+
+Firebase Hosting is configured as an additional host for the same static application. The default
+project is recorded in `.firebaserc`, the deployment scripts also pin that project explicitly, and
+Firebase deploys rebuild with `/` as the Vite base while the existing GitHub Pages build continues
+to use `/col/`.
+
+1. Sign in locally with `npx firebase login`.
+2. Deploy the live channel with `npm run firebase:deploy`.
+3. Create a temporary shareable channel with `npm run firebase:preview -- <channel-name>`.
+4. List live and preview channels with `npm run firebase:channels`.
+5. Add `pyclimb-a4a5c.web.app` and `pyclimb-a4a5c.firebaseapp.com` under Firebase Authentication → Settings → Authorized domains if they are not already listed.
+6. Add `https://pyclimb-a4a5c.web.app,https://pyclimb-a4a5c.firebaseapp.com` to `COLLAB_ALLOWED_ORIGINS` and redeploy the Cloudflare relay so collaborative notebooks work on the live Firebase URLs.
+
+The Firebase GitHub workflows are gated by the repository variable
+`FIREBASE_HOSTING_ENABLED`. Before setting it to `true`, create the Actions secret
+`FIREBASE_SERVICE_ACCOUNT_PYCLIMB_A4A5C` with the Firebase Hosting deployment service-account
+JSON. Pushes to `main` then update the live Firebase site, while pull requests from branches in
+this repository receive a seven-day Firebase preview URL in a PR comment.
+
+Preview URLs use the real Firebase backend. The GitHub deployment service account's Firebase
+Authentication Admin role lets the action register preview URLs for Authentication automatically.
+The collaboration relay still uses an exact-origin allowlist, so collaborative notebooks require
+each temporary preview hostname to be added to `COLLAB_ALLOWED_ORIGINS`.
 
 ## Release checks
 

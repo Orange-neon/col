@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run validate:problems && npm run typecheck && vite build",
+    "build:firebase": "npm run build -- --base=/",
     "bank:new": "tsx scripts/create-bank-version.ts",
     "check": "npm run test && npm run collaboration:test && npm run firebase:test:rules && npm run verify:solutions && npm run build && npm run collaboration:dry-run",
     "collaboration:deploy": "wrangler deploy --config workers/collaboration/wrangler.jsonc",
@@ -21,6 +22,9 @@
     "collaboration:test": "vitest run --config workers/collaboration/vitest.config.ts",
     "collaboration:typecheck": "tsc -p workers/collaboration/tsconfig.json --pretty false",
     "firebase:test:rules": "firebase emulators:exec --only database --project demo-col-collaboration \"vitest run --config firebase.rules.vitest.config.ts\"",
+    "firebase:deploy": "firebase deploy --only hosting --project pyclimb-a4a5c",
+    "firebase:preview": "firebase hosting:channel:deploy --project pyclimb-a4a5c",
+    "firebase:channels": "firebase hosting:channel:list --project pyclimb-a4a5c",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --pretty false && npm run collaboration:typecheck",
